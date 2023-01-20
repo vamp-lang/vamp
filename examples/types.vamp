@@ -1,0 +1,65 @@
+# Value types
+
+# Integer
+let integer = 0
+
+# Float
+let float = 1.3
+
+# Tags
+let color = Red
+let type = Person
+let animal = Dog
+
+# Sets (sum types)
+
+# Void is a set of no values. When encountered, it stops a program.
+let void = {}
+
+# 1-element set is homologous to element itself,
+# which makes `{}` the natural grouping operator of
+# the language. Another way of thinking about this is
+# that all values in Vamp are actually sets of possible values.
+let b = {}
+let a = {1}
+
+# 2-element set introduces a branch into the program where
+# `a` can be either `1` or `22`.
+let a = {1, 22}
+
+# Tuples 
+let nil = ()
+
+# A single element tuples are distinct from values.
+# (i.e., x != (x) != ((x)) != (((x))) != ...)
+# By convention, `(x)` and `()` jointly form the optional type where `(x)`
+# is analogous to `Some(x)` and `()` is analogous to `None`.
+let single = (1)
+
+# Multi-element and named tuples
+let two = (1, 2)
+let three = (1, 2, 3)
+let named = (age: 24, firstName: "Ethan")
+
+# Tagged tuples
+#
+# Tuples can be optionally prefixed with a "tag" starting with an
+# uppercase letter. This tag serves as a type indicator for the values
+# in the tuple and allows sum types among tuples to be easily defined.
+let result = Ok(1)
+let error = Error("Something went wrong!")
+
+# Taggled Tuples
+let option = Some(1)
+let result = Error("Unexpected character!")
+let good = Ok(None)
+
+# Vectors
+let vec = [1, 2, 3]
+
+# Maps
+let map = {"x": 10, "y": 10}
+let map = {"z": 10, 0: 2, Tag: AnotherTag}
+
+# Functions
+let f = x -> x
