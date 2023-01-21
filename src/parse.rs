@@ -18,6 +18,9 @@ pub enum Pattern {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Import(String, String);
+
+#[derive(Debug, PartialEq)]
 pub struct Let(Pattern, Box<Expr>);
 
 #[derive(Debug, PartialEq)]
@@ -31,7 +34,7 @@ pub struct Tuple {
 pub enum Expr {
     Void,
     Nil,
-    Block(Vec<Let>, Box<Expr>),
+    Block(Vec<Import>, Vec<Let>, Box<Expr>),
     Function(Pattern, Box<Expr>),
     Tuple(Tuple),
     Vector(Vec<Expr>),
@@ -205,6 +208,8 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_tuple(&mut self) -> Result<Option<Expr>> {
+        let i = self.index;
+        let tag = self.parse_tag();
         if let Some(left_parenthesis_span) = self.accept(TokenKind::LeftParenthesis) {
             let mut expressions = Vec::new();
             if let Some(expression) = self.parse_expression()? {
@@ -219,13 +224,17 @@ impl<'source> Parser<'source> {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
-            let tuple = Tuple {
-                tag: None,
-                positional: expressions,
-                named: HashMap::default(),
-            };
-            Ok(Some(Expr::Tuple(tuple)))
+            if expressions.len() == 0 {
+                Ok(Some(Expr::Nil))
+            } else {
+                Ok(Some(Expr::Tuple(Tuple {
+                    tag,
+                    positional: expressions,
+                    named: HashMap::new(),
+                })))
+            }
         } else {
+            self.index = i;
             Ok(None)
         }
     }
@@ -246,6 +255,40 @@ impl<'source> Parser<'source> {
                 span: left_bracket_span,
             })?;
             Ok(Some(Expr::Vector(expressions)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_import(&mut self) -> Result<Option<Import>> {
+        if let Some(identifier) = self.parse_identifier() {
+            if let Some(string) = self.parse_string()? {
+                return Ok(Some(Import(identifier, string)));
+            }
+        }
+        return Ok(None);
+    }
+
+    fn parse_imports(&mut self) -> Result<Option<Vec<Import>>> {
+        let mut imports = Vec::new();
+        if let Some(import_span) = self.accept(TokenKind::Import) {
+            let left_parenthesis_span = self.accept(TokenKind::LeftParenthesis).ok_or(Error {
+                kind: ErrorKind::InvalidToken,
+                span: import_span,
+            })?;
+            if let Some(import) = self.parse_import()? {
+                imports.push(import);
+                while self.accept(TokenKind::Comma).is_some() {
+                    if let Some(import) = self.parse_import()? {
+                        imports.push(import);
+                    }
+                }
+            }
+            self.accept(TokenKind::RightParenthesis).ok_or(Error {
+                kind: ErrorKind::UnbalancedDelimiters,
+                span: left_parenthesis_span,
+            })?;
+            Ok(Some(imports))
         } else {
             Ok(None)
         }
@@ -293,7 +336,13 @@ impl<'source> Parser<'source> {
     }
 
     fn parse_expression(&mut self) -> Result<Option<Expr>> {
-        if let Some(identifier) = self.parse_identifier() {
+        if let Some(tuple) = self.parse_tuple()? {
+            Ok(Some(tuple))
+        } else if let Some(vector) = self.parse_vector()? {
+            Ok(Some(vector))
+        } else if let Some(block) = self.parse_block()? {
+            Ok(Some(block))
+        } else if let Some(identifier) = self.parse_identifier() {
             Ok(Some(Expr::Identifier(identifier)))
         } else if let Some(tag) = self.parse_tag() {
             Ok(Some(Expr::Tag(tag)))
@@ -303,18 +352,18 @@ impl<'source> Parser<'source> {
             Ok(Some(Expr::Integer(integer)))
         } else if let Some(float) = self.parse_float()? {
             Ok(Some(Expr::Float(float)))
-        } else if let Some(tuple) = self.parse_tuple()? {
-            Ok(Some(tuple))
-        } else if let Some(vector) = self.parse_vector()? {
-            Ok(Some(vector))
-        } else if let Some(block) = self.parse_block()? {
-            Ok(Some(block))
         } else {
             Ok(None)
         }
     }
 
     fn parse(&mut self) -> Result<Expr> {
+        let imports = if let Some(imports) = self.parse_imports()? {
+            self.accept(TokenKind::Comma);
+            imports
+        } else {
+            Vec::new()
+        };
         let mut lets = Vec::new();
         if let Some(let_) = self.parse_let()? {
             lets.push(let_);
@@ -324,8 +373,11 @@ impl<'source> Parser<'source> {
                 }
             }
         }
-        let expression = self.parse_expression()?.unwrap_or(Expr::Nil);
-        Ok(Expr::Block(lets, expression.into()))
+        if let Some(expression) = self.parse_expression()? {
+            Ok(Expr::Block(imports, lets, expression.into()))
+        } else {
+            Ok(Expr::Void)
+        }
     }
 }
 
@@ -345,7 +397,7 @@ pub fn parse_expression(source: &str) -> Result<Expr> {
         index: 0,
     }
     .parse_expression()?
-    .unwrap_or(Expr::Nil);
+    .unwrap_or(Expr::Void);
     Ok(expression)
 }
 
@@ -426,6 +478,7 @@ mod tests {
 
     #[test]
     fn test_parse_tuple() {
+        assert_eq!(parse_expression("()"), Ok(Expr::Nil),);
         assert_eq!(
             parse_expression("(1)"),
             Ok(Expr::Tuple(Tuple {
@@ -442,6 +495,14 @@ mod tests {
                 named: HashMap::new()
             }))
         );
+        assert_eq!(
+            parse_expression("Point(1, 2)"),
+            Ok(Expr::Tuple(Tuple {
+                tag: Some("Point".into()),
+                positional: vec![Expr::Integer(1), Expr::Integer(2)],
+                named: HashMap::new(),
+            }))
+        )
     }
 
     #[test]
@@ -462,9 +523,12 @@ mod tests {
 
     #[test]
     fn test_parse_block() {
+        assert_eq!(parse_expression("{}"), Ok(Expr::Void));
+        assert_eq!(parse(""), Ok(Expr::Void));
         assert_eq!(
             parse("let x = 0, let y = 1, [x, y]"),
             Ok(Expr::Block(
+                vec![],
                 vec![
                     Let(Pattern::Identifier("x".into()), Expr::Integer(0).into()),
                     Let(Pattern::Identifier("y".into()), Expr::Integer(1).into())
@@ -480,18 +544,25 @@ mod tests {
             parse("{{1}}"),
             Ok(Expr::Block(
                 vec![],
-                Expr::Block(vec![], Expr::Block(vec![], Expr::Integer(1).into()).into()).into()
+                vec![],
+                Expr::Block(
+                    vec![],
+                    vec![],
+                    Expr::Block(vec![], vec![], Expr::Integer(1).into()).into()
+                )
+                .into()
             ))
         );
         assert_eq!(
             parse(
                 r#"
-            let a = "test"
-            let b = "test"
-            (a, b)
-            "#
+                let a = "test"
+                let b = "test"
+                (a, b)
+                "#
             ),
             Ok(Expr::Block(
+                vec![],
                 vec![
                     Let(
                         Pattern::Identifier("a".into()),
@@ -505,9 +576,40 @@ mod tests {
                 Expr::Tuple(Tuple {
                     tag: None,
                     positional: vec![Expr::Identifier("a".into()), Expr::Identifier("b".into())],
-                    named: HashMap::default()
+                    named: HashMap::new()
                 })
                 .into()
+            ))
+        );
+        assert_eq!(
+            parse(
+                r#"
+                import (
+                    x "x"
+                    y "y"
+                )
+                let point = Point(x, y)
+                point
+                "#
+            ),
+            Ok(Expr::Block(
+                vec![
+                    Import("x".into(), "x".into()),
+                    Import("y".into(), "y".into())
+                ],
+                vec![Let(
+                    Pattern::Identifier("point".into()),
+                    Expr::Tuple(Tuple {
+                        tag: Some("Point".into()),
+                        positional: vec![
+                            Expr::Identifier("x".into()),
+                            Expr::Identifier("y".into())
+                        ],
+                        named: HashMap::new(),
+                    })
+                    .into()
+                )],
+                Expr::Identifier("point".into()).into()
             ))
         );
     }

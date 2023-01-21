@@ -48,6 +48,7 @@ pub enum TokenKind {
     Float,
     String,
     Let,
+    Import,
 }
 
 #[derive(Debug, PartialEq)]
@@ -208,6 +209,7 @@ impl<'source> Tokens<'source> {
             self.accept_while(is_identifier_rest);
             self.ok(match &self.source[self.start.offset..self.end.offset] {
                 b"let" => TokenKind::Let,
+                b"import" => TokenKind::Import,
                 _ => TokenKind::Identifier,
             })
         } else {
@@ -373,6 +375,14 @@ mod tests {
                 (TokenKind::Identifier, "_dateOfBirth"),
             ])
         );
+    }
+
+    #[test]
+    fn test_keywords() {
+        assert_eq!(
+            token_slices("let import"),
+            Ok(vec![(TokenKind::Let, "let"), (TokenKind::Import, "import"),])
+        )
     }
 
     #[test]
