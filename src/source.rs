@@ -31,6 +31,7 @@ pub enum ErrorKind {
     UnbalancedDelimiters,
     InvalidCharacter,
     InvalidToken,
+    TuplePositionalAfterNamed,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

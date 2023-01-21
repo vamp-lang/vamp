@@ -207,16 +207,47 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn parse_tuple_member(&mut self) -> Result<Option<(Option<String>, Expr)>> {
+        if let Some(identifier) = self.parse_identifier() {
+            if self.accept(TokenKind::Colon).is_some() {
+                let expr = self
+                    .parse_expr()?
+                    .unwrap_or_else(|| Expr::Identifier(identifier.clone()));
+                Ok(Some((Some(identifier), expr)))
+            } else {
+                Ok(Some((None, Expr::Identifier(identifier))))
+            }
+        } else if let Some(expr) = self.parse_expr()? {
+            Ok(Some((None, expr)))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn parse_tuple(&mut self) -> Result<Option<Expr>> {
         let i = self.index;
         let tag = self.parse_tag();
         if let Some(left_parenthesis_span) = self.accept(TokenKind::LeftParenthesis) {
-            let mut expressions = Vec::new();
-            if let Some(expression) = self.parse_expression()? {
-                expressions.push(expression);
-                while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(expression) = self.parse_expression()? {
-                        expressions.push(expression);
+            let mut positional = Vec::new();
+            let mut named = HashMap::new();
+            if let Some((key, expr)) = self.parse_tuple_member()? {
+                if let Some(key) = key {
+                    named.insert(key, expr);
+                } else {
+                    positional.push(expr);
+                }
+                while let Some(comma_span) = self.accept(TokenKind::Comma) {
+                    if let Some((key, expr)) = self.parse_tuple_member()? {
+                        if let Some(key) = key {
+                            named.insert(key, expr);
+                        } else if named.len() > 0 {
+                            return Err(Error {
+                                kind: ErrorKind::TuplePositionalAfterNamed,
+                                span: comma_span,
+                            });
+                        } else {
+                            positional.push(expr);
+                        }
                     }
                 }
             }
@@ -224,13 +255,13 @@ impl<'source> Parser<'source> {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
-            if expressions.len() == 0 {
+            if positional.len() == 0 && named.len() == 0 {
                 Ok(Some(Expr::Nil))
             } else {
                 Ok(Some(Expr::Tuple(Tuple {
                     tag,
-                    positional: expressions,
-                    named: HashMap::new(),
+                    positional,
+                    named,
                 })))
             }
         } else {
@@ -241,12 +272,12 @@ impl<'source> Parser<'source> {
 
     fn parse_vector(&mut self) -> Result<Option<Expr>> {
         if let Some(left_bracket_span) = self.accept(TokenKind::LeftBracket) {
-            let mut expressions = Vec::new();
-            if let Some(expression) = self.parse_expression()? {
-                expressions.push(expression);
+            let mut exprs = Vec::new();
+            if let Some(expr) = self.parse_expr()? {
+                exprs.push(expr);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(expression) = self.parse_expression()? {
-                        expressions.push(expression);
+                    if let Some(expr) = self.parse_expr()? {
+                        exprs.push(expr);
                     }
                 }
             }
@@ -254,7 +285,7 @@ impl<'source> Parser<'source> {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_bracket_span,
             })?;
-            Ok(Some(Expr::Vector(expressions)))
+            Ok(Some(Expr::Vector(exprs)))
         } else {
             Ok(None)
         }
@@ -312,11 +343,11 @@ impl<'source> Parser<'source> {
                 kind: ErrorKind::InvalidToken,
                 span: let_span,
             })?;
-            let expression = self.parse_expression()?.ok_or(Error {
+            let expr = self.parse_expr()?.ok_or(Error {
                 kind: ErrorKind::InvalidToken,
                 span: let_span,
             })?;
-            Ok(Some(Let(pattern, expression.into())))
+            Ok(Some(Let(pattern, expr.into())))
         } else {
             Ok(None)
         }
@@ -335,7 +366,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_expression(&mut self) -> Result<Option<Expr>> {
+    fn parse_expr(&mut self) -> Result<Option<Expr>> {
         if let Some(tuple) = self.parse_tuple()? {
             Ok(Some(tuple))
         } else if let Some(vector) = self.parse_vector()? {
@@ -373,8 +404,8 @@ impl<'source> Parser<'source> {
                 }
             }
         }
-        if let Some(expression) = self.parse_expression()? {
-            Ok(Expr::Block(imports, lets, expression.into()))
+        if let Some(expr) = self.parse_expr()? {
+            Ok(Expr::Block(imports, lets, expr.into()))
         } else {
             Ok(Expr::Void)
         }
@@ -390,15 +421,15 @@ pub fn parse(source: &str) -> Result<Expr> {
     .parse()
 }
 
-pub fn parse_expression(source: &str) -> Result<Expr> {
-    let expression = Parser {
+pub fn parse_expr(source: &str) -> Result<Expr> {
+    let expr = Parser {
         source,
         tokens: tokenize(source)?,
         index: 0,
     }
-    .parse_expression()?
+    .parse_expr()?
     .unwrap_or(Expr::Void);
-    Ok(expression)
+    Ok(expr)
 }
 
 #[cfg(test)]
@@ -407,80 +438,80 @@ mod tests {
 
     #[test]
     fn test_parse_identifier() {
-        assert_eq!(parse_expression("x"), Ok(Expr::Identifier("x".into())));
+        assert_eq!(parse_expr("x"), Ok(Expr::Identifier("x".into())));
     }
 
     #[test]
     fn test_parse_tag() {
-        assert_eq!(parse_expression("X"), Ok(Expr::Tag("X".into())));
+        assert_eq!(parse_expr("X"), Ok(Expr::Tag("X".into())));
     }
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse_expression(r#""""#), Ok(Expr::String("".into())));
-        assert_eq!(parse_expression(r#""\"""#), Ok(Expr::String("\"".into())));
-        assert_eq!(parse_expression(r#""\\""#), Ok(Expr::String("\\".into())));
+        assert_eq!(parse_expr(r#""""#), Ok(Expr::String("".into())));
+        assert_eq!(parse_expr(r#""\"""#), Ok(Expr::String("\"".into())));
+        assert_eq!(parse_expr(r#""\\""#), Ok(Expr::String("\\".into())));
         assert_eq!(
-            parse_expression(r#""\0\a\b\t\f\v\n\r""#),
+            parse_expr(r#""\0\a\b\t\f\v\n\r""#),
             Ok(Expr::String("\0\x07\x08\t\x0A\x0B\n\r".into()))
         );
         assert_eq!(
-            parse_expression(r#""\x00\x01\x02\x03\x04\x05""#),
+            parse_expr(r#""\x00\x01\x02\x03\x04\x05""#),
             Ok(Expr::String("\x00\x01\x02\x03\x04\x05".into()))
         );
         assert_eq!(
-            parse_expression(r#""\z""#).unwrap_err().kind,
+            parse_expr(r#""\z""#).unwrap_err().kind,
             ErrorKind::InvalidEscapeSequence
         );
         assert_eq!(
-            parse_expression(r#""\xFF""#).unwrap_err().kind,
+            parse_expr(r#""\xFF""#).unwrap_err().kind,
             ErrorKind::InvalidEscapeSequence
         );
     }
 
     #[test]
     fn test_parse_integer() {
-        assert_eq!(parse_expression("0"), Ok(Expr::Integer(0)));
-        assert_eq!(parse_expression("-0"), Ok(Expr::Integer(0)));
-        assert_eq!(parse_expression("7"), Ok(Expr::Integer(7)));
-        assert_eq!(parse_expression("-3"), Ok(Expr::Integer(-3)));
-        assert_eq!(parse_expression("123"), Ok(Expr::Integer(123)));
-        assert_eq!(parse_expression("-313"), Ok(Expr::Integer(-313)));
-        assert_eq!(parse_expression("000747"), Ok(Expr::Integer(747)));
-        assert_eq!(parse_expression("-002200"), Ok(Expr::Integer(-2200)));
+        assert_eq!(parse_expr("0"), Ok(Expr::Integer(0)));
+        assert_eq!(parse_expr("-0"), Ok(Expr::Integer(0)));
+        assert_eq!(parse_expr("7"), Ok(Expr::Integer(7)));
+        assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
+        assert_eq!(parse_expr("123"), Ok(Expr::Integer(123)));
+        assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
+        assert_eq!(parse_expr("000747"), Ok(Expr::Integer(747)));
+        assert_eq!(parse_expr("-002200"), Ok(Expr::Integer(-2200)));
         assert_eq!(
-            parse_expression("9223372036854775807"),
+            parse_expr("9223372036854775807"),
             Ok(Expr::Integer(9223372036854775807))
         );
         assert_eq!(
-            parse_expression("9223372036854775808").unwrap_err().kind,
+            parse_expr("9223372036854775808").unwrap_err().kind,
             ErrorKind::InvalidInteger
         );
         assert_eq!(
-            parse_expression("-9223372036854775808"),
+            parse_expr("-9223372036854775808"),
             Ok(Expr::Integer(-9223372036854775808))
         );
         assert_eq!(
-            parse_expression("-9223372036854775809").unwrap_err().kind,
+            parse_expr("-9223372036854775809").unwrap_err().kind,
             ErrorKind::InvalidInteger
         );
     }
 
     #[test]
     fn test_parse_float() {
-        assert_eq!(parse_expression("0.0"), Ok(Expr::Float(0.0)));
-        assert_eq!(parse_expression("-0.0"), Ok(Expr::Float(0.0)));
-        assert_eq!(parse_expression("1.0"), Ok(Expr::Float(1.0)));
-        assert_eq!(parse_expression("-1.0"), Ok(Expr::Float(-1.0)));
-        assert_eq!(parse_expression("3.141592"), Ok(Expr::Float(3.141592)));
-        assert_eq!(parse_expression("-2.7800000"), Ok(Expr::Float(-2.78)));
+        assert_eq!(parse_expr("0.0"), Ok(Expr::Float(0.0)));
+        assert_eq!(parse_expr("-0.0"), Ok(Expr::Float(0.0)));
+        assert_eq!(parse_expr("1.0"), Ok(Expr::Float(1.0)));
+        assert_eq!(parse_expr("-1.0"), Ok(Expr::Float(-1.0)));
+        assert_eq!(parse_expr("3.141592"), Ok(Expr::Float(3.141592)));
+        assert_eq!(parse_expr("-2.7800000"), Ok(Expr::Float(-2.78)));
     }
 
     #[test]
     fn test_parse_tuple() {
-        assert_eq!(parse_expression("()"), Ok(Expr::Nil),);
+        assert_eq!(parse_expr("()"), Ok(Expr::Nil),);
         assert_eq!(
-            parse_expression("(1)"),
+            parse_expr("(1)"),
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![Expr::Integer(1)],
@@ -488,7 +519,7 @@ mod tests {
             }))
         );
         assert_eq!(
-            parse_expression("(1, 2, 3)"),
+            parse_expr("(1, 2, 3)"),
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![Expr::Integer(1), Expr::Integer(2), Expr::Integer(3)],
@@ -496,23 +527,42 @@ mod tests {
             }))
         );
         assert_eq!(
-            parse_expression("Point(1, 2)"),
+            parse_expr("Point(1, 2)"),
             Ok(Expr::Tuple(Tuple {
                 tag: Some("Point".into()),
                 positional: vec![Expr::Integer(1), Expr::Integer(2)],
                 named: HashMap::new(),
+            }))
+        );
+        assert_eq!(
+            parse_expr("(x: 1, y: 2)"),
+            Ok(Expr::Tuple(Tuple {
+                tag: None,
+                positional: vec![],
+                named: HashMap::from([
+                    ("x".into(), Expr::Integer(1)),
+                    ("y".into(), Expr::Integer(2)),
+                ])
+            }))
+        );
+        assert_eq!(
+            parse_expr(r#"Person("id", name: "Bob", age: 49)"#),
+            Ok(Expr::Tuple(Tuple {
+                tag: Some("Person".into()),
+                positional: vec![Expr::String("id".into())],
+                named: HashMap::from([
+                    ("name".into(), Expr::String("Bob".into())),
+                    ("age".into(), Expr::Integer(49))
+                ]),
             }))
         )
     }
 
     #[test]
     fn test_parse_vector() {
+        assert_eq!(parse_expr("[1]"), Ok(Expr::Vector(vec![Expr::Integer(1)])));
         assert_eq!(
-            parse_expression("[1]"),
-            Ok(Expr::Vector(vec![Expr::Integer(1)]))
-        );
-        assert_eq!(
-            parse_expression("[1, 2, 3]"),
+            parse_expr("[1, 2, 3]"),
             Ok(Expr::Vector(vec![
                 Expr::Integer(1),
                 Expr::Integer(2),
@@ -523,7 +573,7 @@ mod tests {
 
     #[test]
     fn test_parse_block() {
-        assert_eq!(parse_expression("{}"), Ok(Expr::Void));
+        assert_eq!(parse_expr("{}"), Ok(Expr::Void));
         assert_eq!(parse(""), Ok(Expr::Void));
         assert_eq!(
             parse("let x = 0, let y = 1, [x, y]"),
