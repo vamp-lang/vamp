@@ -45,7 +45,9 @@ fn main() {
             SourceEvent::File(path) => {
                 match fs::read_to_string(path) {
                     Ok(source) => {
-                        environment.eval("", &source);
+                        if let Err(error) = environment.eval(&source) {
+                            println!("error: {:?}", error);
+                        }
                     }
                     Err(error) => {
                         if error.kind() == io::ErrorKind::NotFound {
@@ -54,9 +56,10 @@ fn main() {
                     }
                 }
             }
-            SourceEvent::Repl(source) => {
-                environment.eval("", &source);
-            }
+            SourceEvent::Repl(source) => match environment.eval(&source) {
+                Ok(value) => println!("{}", value),
+                Err(error) => println!("error: {:?}", error),
+            },
             SourceEvent::Exit => {
                 break;
             }

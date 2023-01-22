@@ -122,10 +122,10 @@ impl<'source> Parser<'source> {
                         'b' => string.push('\x08'),
                         // Horizontal tab
                         't' => string.push('\t'),
-                        // Form feed
-                        'f' => string.push('\x0A'),
                         // Vertical tab
                         'v' => string.push('\x0B'),
+                        // Form feed
+                        'f' => string.push('\x0C'),
                         // Newline
                         'n' => {
                             string.push('\n');
