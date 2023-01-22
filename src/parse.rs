@@ -6,7 +6,7 @@ use std::collections::HashMap;
 pub struct PatternTuple {
     pub tag: Option<String>,
     pub positional: Vec<Pattern>,
-    pub named: HashMap<String, Pattern>,
+    pub named: Vec<(String, Pattern)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -27,14 +27,22 @@ pub struct Let(Pattern, Box<Expr>);
 pub struct Tuple {
     pub tag: Option<String>,
     pub positional: Vec<Expr>,
-    pub named: HashMap<String, Expr>,
+    pub named: Vec<(String, Expr)>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum OperatorKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Void,
     Nil,
-    Block(Vec<Import>, Vec<Let>, Box<Expr>),
+    Block(Vec<Import>, Vec<Let>, Vec<Expr>),
     Function(Pattern, Box<Expr>),
     Tuple(Tuple),
     Vector(Vec<Expr>),
@@ -44,6 +52,7 @@ pub enum Expr {
     String(String),
     Integer(i64),
     Float(f64),
+    Operator(OperatorKind, Vec<Expr>),
     Call(Box<Expr>, Vec<Expr>),
 }
 
@@ -59,6 +68,22 @@ impl<'source> Parser<'source> {
             let span = self.tokens[self.index].span;
             self.index += 1;
             Some(span)
+        } else {
+            None
+        }
+    }
+
+    fn accept_operator(&mut self) -> Option<(OperatorKind, u8, u8)> {
+        if self.index < self.tokens.len() {
+            let result = match self.tokens[self.index].kind {
+                TokenKind::Plus => (OperatorKind::Add, 1, 2),
+                TokenKind::Minus => (OperatorKind::Subtract, 1, 2),
+                TokenKind::Times => (OperatorKind::Multiply, 3, 4),
+                TokenKind::Divide => (OperatorKind::Divide, 3, 4),
+                _ => return None,
+            };
+            self.index += 1;
+            Some(result)
         } else {
             None
         }
@@ -228,18 +253,18 @@ impl<'source> Parser<'source> {
         let i = self.index;
         let tag = self.parse_tag();
         if let Some(left_parenthesis_span) = self.accept(TokenKind::LeftParenthesis) {
-            let mut positional = Vec::new();
-            let mut named = HashMap::new();
+            let mut positional = vec![];
+            let mut named = vec![];
             if let Some((key, expr)) = self.parse_tuple_member()? {
                 if let Some(key) = key {
-                    named.insert(key, expr);
+                    named.push((key, expr));
                 } else {
                     positional.push(expr);
                 }
                 while let Some(comma_span) = self.accept(TokenKind::Comma) {
                     if let Some((key, expr)) = self.parse_tuple_member()? {
                         if let Some(key) = key {
-                            named.insert(key, expr);
+                            named.push((key, expr));
                         } else if named.len() > 0 {
                             return Err(Error {
                                 kind: ErrorKind::TuplePositionalAfterNamed,
@@ -287,6 +312,20 @@ impl<'source> Parser<'source> {
             })?;
             Ok(Some(Expr::Vector(exprs)))
         } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_map(&mut self) -> Result<Option<Expr>> {
+        let i = self.index;
+        if let Some(left_brace_span) = self.accept(TokenKind::LeftBrace) {
+            self.accept(TokenKind::RightBrace).ok_or(Error {
+                kind: ErrorKind::UnbalancedDelimiters,
+                span: left_brace_span,
+            })?;
+            todo!()
+        } else {
+            self.index = i;
             Ok(None)
         }
     }
@@ -366,7 +405,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Option<Expr>> {
+    fn parse_atom(&mut self) -> Result<Option<Expr>> {
         if let Some(tuple) = self.parse_tuple()? {
             Ok(Some(tuple))
         } else if let Some(vector) = self.parse_vector()? {
@@ -388,6 +427,37 @@ impl<'source> Parser<'source> {
         }
     }
 
+    fn parse_expr_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
+        if let Some(mut left) = self.parse_atom()? {
+            loop {
+                if let Some((kind, left_precedence, right_precedence)) = self.accept_operator() {
+                    if left_precedence < min_precedence {
+                        self.index -= 1;
+                        break;
+                    }
+                    if let Some(right) = self.parse_expr_precedence(right_precedence)? {
+                        left = Expr::Operator(kind, vec![left, right]);
+                    } else {
+                        return Err(Error {
+                            kind: ErrorKind::InvalidToken,
+                            // TODO: This panics on unexpected end of file after operator.
+                            span: self.tokens[self.index].span,
+                        });
+                    }
+                } else {
+                    break;
+                }
+            }
+            Ok(Some(left))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_expr(&mut self) -> Result<Option<Expr>> {
+        self.parse_expr_precedence(0)
+    }
+
     fn parse(&mut self) -> Result<Expr> {
         let imports = if let Some(imports) = self.parse_imports()? {
             self.accept(TokenKind::Comma);
@@ -404,8 +474,17 @@ impl<'source> Parser<'source> {
                 }
             }
         }
+        let mut exprs = Vec::new();
         if let Some(expr) = self.parse_expr()? {
-            Ok(Expr::Block(imports, lets, expr.into()))
+            exprs.push(expr);
+            while self.accept(TokenKind::Comma).is_some() {
+                if let Some(expr) = self.parse_expr()? {
+                    exprs.push(expr);
+                }
+            }
+        }
+        if exprs.len() > 0 {
+            Ok(Expr::Block(imports, lets, exprs))
         } else {
             Ok(Expr::Void)
         }
@@ -515,7 +594,7 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![Expr::Integer(1)],
-                named: HashMap::new()
+                named: vec![],
             }))
         );
         assert_eq!(
@@ -523,7 +602,7 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![Expr::Integer(1), Expr::Integer(2), Expr::Integer(3)],
-                named: HashMap::new()
+                named: vec![],
             }))
         );
         assert_eq!(
@@ -531,7 +610,7 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: Some("Point".into()),
                 positional: vec![Expr::Integer(1), Expr::Integer(2)],
-                named: HashMap::new(),
+                named: vec![],
             }))
         );
         assert_eq!(
@@ -539,10 +618,10 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![],
-                named: HashMap::from([
+                named: vec![
                     ("x".into(), Expr::Integer(1)),
                     ("y".into(), Expr::Integer(2)),
-                ])
+                ]
             }))
         );
         assert_eq!(
@@ -550,10 +629,10 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: Some("Person".into()),
                 positional: vec![Expr::String("id".into())],
-                named: HashMap::from([
+                named: vec![
                     ("name".into(), Expr::String("Bob".into())),
                     ("age".into(), Expr::Integer(49))
-                ]),
+                ],
             }))
         )
     }
@@ -572,6 +651,59 @@ mod tests {
     }
 
     #[test]
+    fn test_operators() {
+        assert_eq!(
+            parse_expr("0 + 0"),
+            Ok(Expr::Operator(
+                OperatorKind::Add,
+                vec![Expr::Integer(0).into(), Expr::Integer(0).into()]
+            ))
+        );
+        assert_eq!(
+            parse_expr("0 * 0"),
+            Ok(Expr::Operator(
+                OperatorKind::Multiply,
+                vec![Expr::Integer(0).into(), Expr::Integer(0).into()]
+            ))
+        );
+        assert_eq!(
+            parse_expr("0 + 0 * 0"),
+            Ok(Expr::Operator(
+                OperatorKind::Add,
+                vec![
+                    Expr::Integer(0),
+                    Expr::Operator(
+                        OperatorKind::Multiply,
+                        vec![Expr::Integer(0), Expr::Integer(0)]
+                    )
+                ],
+            ))
+        );
+        assert_eq!(
+            parse_expr("0 * 0 + 0 / 0 - 0"),
+            Ok(Expr::Operator(
+                OperatorKind::Subtract,
+                vec![
+                    Expr::Operator(
+                        OperatorKind::Add,
+                        vec![
+                            Expr::Operator(
+                                OperatorKind::Multiply,
+                                vec![Expr::Integer(0), Expr::Integer(0)],
+                            ),
+                            Expr::Operator(
+                                OperatorKind::Divide,
+                                vec![Expr::Integer(0), Expr::Integer(0)],
+                            ),
+                        ]
+                    ),
+                    Expr::Integer(0)
+                ]
+            )),
+        )
+    }
+
+    #[test]
     fn test_parse_block() {
         assert_eq!(parse_expr("{}"), Ok(Expr::Void));
         assert_eq!(parse(""), Ok(Expr::Void));
@@ -583,11 +715,10 @@ mod tests {
                     Let(Pattern::Identifier("x".into()), Expr::Integer(0).into()),
                     Let(Pattern::Identifier("y".into()), Expr::Integer(1).into())
                 ],
-                Expr::Vector(vec![
+                vec![Expr::Vector(vec![
                     Expr::Identifier("x".into()),
                     Expr::Identifier("y".into())
-                ])
-                .into()
+                ])]
             ))
         );
         assert_eq!(
@@ -595,12 +726,11 @@ mod tests {
             Ok(Expr::Block(
                 vec![],
                 vec![],
-                Expr::Block(
+                vec![Expr::Block(
                     vec![],
                     vec![],
-                    Expr::Block(vec![], vec![], Expr::Integer(1).into()).into()
-                )
-                .into()
+                    vec![Expr::Block(vec![], vec![], vec![Expr::Integer(1)])]
+                )]
             ))
         );
         assert_eq!(
@@ -623,12 +753,11 @@ mod tests {
                         Expr::String("test".into()).into(),
                     )
                 ],
-                Expr::Tuple(Tuple {
+                vec![Expr::Tuple(Tuple {
                     tag: None,
                     positional: vec![Expr::Identifier("a".into()), Expr::Identifier("b".into())],
-                    named: HashMap::new()
-                })
-                .into()
+                    named: vec![],
+                })]
             ))
         );
         assert_eq!(
@@ -655,11 +784,11 @@ mod tests {
                             Expr::Identifier("x".into()),
                             Expr::Identifier("y".into())
                         ],
-                        named: HashMap::new(),
+                        named: vec![],
                     })
                     .into()
                 )],
-                Expr::Identifier("point".into()).into()
+                vec![Expr::Identifier("point".into())]
             ))
         );
     }
