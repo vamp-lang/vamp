@@ -438,10 +438,14 @@ impl<'source> Parser<'source> {
                     if let Some(right) = self.parse_expr_precedence(right_precedence)? {
                         left = Expr::Operator(kind, vec![left, right]);
                     } else {
+                        let span = if self.index < self.tokens.len() {
+                            self.tokens[self.index].span
+                        } else {
+                            self.tokens[self.index - 1].span
+                        };
                         return Err(Error {
                             kind: ErrorKind::InvalidToken,
-                            // TODO: This panics on unexpected end of file after operator.
-                            span: self.tokens[self.index].span,
+                            span,
                         });
                     }
                 } else {
