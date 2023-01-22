@@ -5,7 +5,8 @@ use std::sync::mpsc::Sender;
 pub fn repl(events: Sender<SourceEvent>) {
     let mut editor = Editor::<()>::new().unwrap();
     loop {
-        match editor.readline("> ") {
+        // TODO: Make real prompt once input/ouput timing is fixed.
+        match editor.readline("") {
             Ok(line) => {
                 events.send(SourceEvent::Repl(line)).unwrap();
             }

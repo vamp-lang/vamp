@@ -1,6 +1,5 @@
 use crate::parse::{parse, Expr, OperatorKind};
 use std::collections::HashMap;
-use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub struct Tuple {
@@ -14,7 +13,6 @@ pub enum Value {
     Nil,
     Tuple(Tuple),
     Vector(Vec<Value>),
-    Map(HashMap<String, Value>),
     Tag(String),
     String(String),
     Integer(i64),
@@ -60,7 +58,6 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
-            Value::Map(values) => todo!(),
             Value::Tag(name) => write!(f, "{}", name),
             // TODO: Standard string formatting.
             Value::String(string) => write!(f, "{:?}", string),
@@ -80,11 +77,11 @@ impl Environment {
     }
 
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value, ()> {
-        let value = match expr {
-            Expr::Nil => Value::Nil,
-            // TODO: This is broken
-            Expr::Void => Value::Nil,
-            Expr::Block(imports, lets, exprs) => self.eval_expr(&exprs[0])?,
+        match expr {
+            Expr::Nil => Ok(Value::Nil),
+            // TODO: This is broken, program should halt.
+            Expr::Void => Ok(Value::Nil),
+            Expr::Block(imports, lets, exprs) => self.eval_expr(&exprs[0]),
             Expr::Function(f, args) => todo!(),
             Expr::Tuple(tuple) => {
                 let mut positional = vec![];
@@ -95,25 +92,24 @@ impl Environment {
                 for (key, expr) in &tuple.named {
                     named.insert(key.clone(), self.eval_expr(expr)?);
                 }
-                Value::Tuple(Tuple {
+                Ok(Value::Tuple(Tuple {
                     tag: tuple.tag.clone(),
                     positional,
                     named,
-                })
+                }))
             }
             Expr::Vector(exprs) => {
                 let mut values = vec![];
                 for expr in exprs {
                     values.push(self.eval_expr(expr)?);
                 }
-                Value::Vector(values)
+                Ok(Value::Vector(values))
             }
-            Expr::Map(entries) => todo!(),
             Expr::Identifier(name) => todo!(),
-            Expr::Tag(value) => Value::Tag(value.clone()),
-            Expr::String(value) => Value::String(value.clone()),
-            Expr::Integer(value) => Value::Integer(*value),
-            Expr::Float(value) => Value::Float(*value),
+            Expr::Tag(value) => Ok(Value::Tag(value.clone())),
+            Expr::String(value) => Ok(Value::String(value.clone())),
+            Expr::Integer(value) => Ok(Value::Integer(*value)),
+            Expr::Float(value) => Ok(Value::Float(*value)),
             Expr::Operator(kind, operands) => {
                 let mut values = vec![];
                 for value in operands {
@@ -121,38 +117,38 @@ impl Environment {
                 }
                 match kind {
                     OperatorKind::Add => match &values[..] {
-                        [Value::Integer(a), Value::Integer(b)] => Value::Integer(a + b),
-                        [Value::Integer(a), Value::Float(b)] => Value::Float(*a as f64 + b),
-                        [Value::Float(a), Value::Integer(b)] => Value::Float(a + *b as f64),
-                        [Value::Float(a), Value::Float(b)] => Value::Float(a + b),
-                        _ => todo!(),
+                        [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a + b)),
+                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 + b)),
+                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a + *b as f64)),
+                        [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a + b)),
+                        [Value::String(a), Value::String(b)] => Ok(Value::String(a.clone() + b)),
+                        _ => Err(()),
                     },
                     OperatorKind::Subtract => match &values[..] {
-                        [Value::Integer(a), Value::Integer(b)] => Value::Integer(a - b),
-                        [Value::Integer(a), Value::Float(b)] => Value::Float(*a as f64 - b),
-                        [Value::Float(a), Value::Integer(b)] => Value::Float(a - *b as f64),
-                        [Value::Float(a), Value::Float(b)] => Value::Float(a - b),
-                        _ => todo!(),
+                        [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a - b)),
+                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 - b)),
+                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a - *b as f64)),
+                        [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a - b)),
+                        _ => Err(()),
                     },
                     OperatorKind::Multiply => match &values[..] {
-                        [Value::Integer(a), Value::Integer(b)] => Value::Integer(a * b),
-                        [Value::Integer(a), Value::Float(b)] => Value::Float(*a as f64 * b),
-                        [Value::Float(a), Value::Integer(b)] => Value::Float(a * *b as f64),
-                        [Value::Float(a), Value::Float(b)] => Value::Float(a * b),
-                        _ => todo!(),
+                        [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a * b)),
+                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 * b)),
+                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a * *b as f64)),
+                        [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a * b)),
+                        _ => Err(()),
                     },
                     OperatorKind::Divide => match &values[..] {
-                        [Value::Integer(a), Value::Integer(b)] => Value::Integer(a / b),
-                        [Value::Integer(a), Value::Float(b)] => Value::Float(*a as f64 / b),
-                        [Value::Float(a), Value::Integer(b)] => Value::Float(a / *b as f64),
-                        [Value::Float(a), Value::Float(b)] => Value::Float(a / b),
-                        _ => todo!(),
+                        [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a / b)),
+                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 / b)),
+                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a / *b as f64)),
+                        [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a / b)),
+                        _ => Err(()),
                     },
                 }
             }
             Expr::Call(f, args) => todo!(),
-        };
-        Ok(value)
+        }
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, ()> {
