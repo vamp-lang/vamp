@@ -1,11 +1,12 @@
 use crate::source::{Error, ErrorKind, Result, Span};
+use crate::symbol::{Interner, Symbol};
 use crate::tokens::{tokenize, Token, TokenKind};
 
 #[derive(Debug, PartialEq)]
 pub struct PatternTuple {
-    pub tag: Option<String>,
+    pub tag: Option<Symbol>,
     pub positional: Vec<Pattern>,
-    pub named: Vec<(String, Pattern)>,
+    pub named: Vec<(Symbol, Pattern)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -13,21 +14,21 @@ pub enum Pattern {
     // TODO: Pattern matching
     //Tuple(PatternTuple),
     //Vector(Vec<Pattern>),
-    Identifier(String),
+    Identifier(Symbol),
     //Tag(String),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Import(String, String);
+pub struct Import(Symbol, String);
 
 #[derive(Debug, PartialEq)]
 pub struct Let(Pattern, Box<Expr>);
 
 #[derive(Debug, PartialEq)]
 pub struct Tuple {
-    pub tag: Option<String>,
+    pub tag: Option<Symbol>,
     pub positional: Vec<Expr>,
-    pub named: Vec<(String, Expr)>,
+    pub named: Vec<(Symbol, Expr)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,8 +47,8 @@ pub enum Expr {
     Function(Vec<Pattern>, Box<Expr>),
     Tuple(Tuple),
     Vector(Vec<Expr>),
-    Identifier(String),
-    Tag(String),
+    Identifier(Symbol),
+    Tag(Symbol),
     String(String),
     Integer(i64),
     Float(f64),
@@ -55,13 +56,14 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
 }
 
-pub struct Parser<'source> {
-    source: &'source str,
+pub struct Parser<'a, 'b> {
+    source: &'a str,
+    interner: &'b mut Interner,
     tokens: Vec<Token>,
     index: usize,
 }
 
-impl<'source> Parser<'source> {
+impl<'a, 'b> Parser<'a, 'b> {
     fn accept(&mut self, kind: TokenKind) -> Option<Span> {
         if self.index < self.tokens.len() && self.tokens[self.index].kind == kind {
             let span = self.tokens[self.index].span;
@@ -100,9 +102,9 @@ impl<'source> Parser<'source> {
             .map(|span| self.source[span].into())
     }
 
-    fn parse_tag(&mut self) -> Option<String> {
+    fn parse_tag(&mut self) -> Option<Symbol> {
         self.accept(TokenKind::Tag)
-            .map(|span| self.source[span].into())
+            .map(|span| self.interner.intern(&self.source[span]))
     }
 
     fn parse_string(&mut self) -> Result<Option<String>> {
@@ -210,15 +212,18 @@ impl<'source> Parser<'source> {
         }
     }
 
-    fn parse_tuple_member(&mut self) -> Result<Option<(Option<String>, Expr)>> {
+    fn parse_tuple_member(&mut self) -> Result<Option<(Option<Symbol>, Expr)>> {
         if let Some(identifier) = self.parse_identifier() {
             if self.accept(TokenKind::Colon).is_some() {
                 let expr = self
                     .parse_expr()?
-                    .unwrap_or_else(|| Expr::Identifier(identifier.clone()));
-                Ok(Some((Some(identifier), expr)))
+                    .unwrap_or_else(|| Expr::Identifier(self.interner.intern(&identifier)));
+                Ok(Some((Some(self.interner.intern(&identifier)), expr)))
             } else {
-                Ok(Some((None, Expr::Identifier(identifier))))
+                Ok(Some((
+                    None,
+                    Expr::Identifier(self.interner.intern(&identifier)),
+                )))
             }
         } else if let Some(expr) = self.parse_expr()? {
             Ok(Some((None, expr)))
@@ -297,7 +302,7 @@ impl<'source> Parser<'source> {
     fn parse_import(&mut self) -> Result<Option<Import>> {
         if let Some(identifier) = self.parse_identifier() {
             if let Some(string) = self.parse_string()? {
-                return Ok(Some(Import(identifier, string)));
+                return Ok(Some(Import(self.interner.intern(&identifier), string)));
             }
         }
         return Ok(None);
@@ -330,7 +335,7 @@ impl<'source> Parser<'source> {
 
     fn parse_pattern(&mut self) -> Result<Option<Pattern>> {
         if let Some(identifier) = self.parse_identifier() {
-            Ok(Some(Pattern::Identifier(identifier)))
+            Ok(Some(Pattern::Identifier(self.interner.intern(&identifier))))
         } else {
             Ok(None)
         }
@@ -377,7 +382,7 @@ impl<'source> Parser<'source> {
         } else if let Some(block) = self.parse_block()? {
             Ok(Some(block))
         } else if let Some(identifier) = self.parse_identifier() {
-            Ok(Some(Expr::Identifier(identifier)))
+            Ok(Some(Expr::Identifier(self.interner.intern(&identifier))))
         } else if let Some(tag) = self.parse_tag() {
             Ok(Some(Expr::Tag(tag)))
         } else if let Some(string) = self.parse_string()? {
@@ -489,18 +494,20 @@ impl<'source> Parser<'source> {
     }
 }
 
-pub fn parse(source: &str) -> Result<Expr> {
+pub fn parse<'a, 'b>(source: &'a str, interner: &'b mut Interner) -> Result<Expr> {
     Parser {
         source,
+        interner,
         tokens: tokenize(source)?,
         index: 0,
     }
     .parse()
 }
 
-pub fn parse_expr(source: &str) -> Result<Expr> {
+pub fn parse_expr<'a, 'b>(source: &'a str, interner: &'b mut Interner) -> Result<Expr> {
     let expr = Parser {
         source,
+        interner,
         tokens: tokenize(source)?,
         index: 0,
     }
@@ -513,14 +520,24 @@ pub fn parse_expr(source: &str) -> Result<Expr> {
 mod tests {
     use super::*;
 
+    fn parse(source: &str) -> Result<Expr> {
+        let mut interner: Interner = Interner::new();
+        super::parse(source, &mut interner)
+    }
+
+    fn parse_expr(source: &str) -> Result<Expr> {
+        let mut interner: Interner = Interner::new();
+        super::parse_expr(source, &mut interner)
+    }
+
     #[test]
     fn test_parse_identifier() {
-        assert_eq!(parse_expr("x"), Ok(Expr::Identifier("x".into())));
+        assert_eq!(parse_expr("x"), Ok(Expr::Identifier(Symbol(0))));
     }
 
     #[test]
     fn test_parse_tag() {
-        assert_eq!(parse_expr("X"), Ok(Expr::Tag("X".into())));
+        assert_eq!(parse_expr("X"), Ok(Expr::Tag(Symbol(0))));
     }
 
     #[test]
@@ -608,7 +625,7 @@ mod tests {
         assert_eq!(
             parse_expr("Point(1, 2)"),
             Ok(Expr::Tuple(Tuple {
-                tag: Some("Point".into()),
+                tag: Some(Symbol(0)),
                 positional: vec![Expr::Integer(1), Expr::Integer(2)],
                 named: vec![],
             }))
@@ -618,20 +635,17 @@ mod tests {
             Ok(Expr::Tuple(Tuple {
                 tag: None,
                 positional: vec![],
-                named: vec![
-                    ("x".into(), Expr::Integer(1)),
-                    ("y".into(), Expr::Integer(2)),
-                ]
+                named: vec![(Symbol(0), Expr::Integer(1)), (Symbol(1), Expr::Integer(2)),]
             }))
         );
         assert_eq!(
             parse_expr(r#"Person("id", name: "Bob", age: 49)"#),
             Ok(Expr::Tuple(Tuple {
-                tag: Some("Person".into()),
+                tag: Some(Symbol(0)),
                 positional: vec![Expr::String("id".into())],
                 named: vec![
-                    ("name".into(), Expr::String("Bob".into())),
-                    ("age".into(), Expr::Integer(49))
+                    (Symbol(1), Expr::String("Bob".into())),
+                    (Symbol(2), Expr::Integer(49))
                 ],
             }))
         )
@@ -710,18 +724,18 @@ mod tests {
                         OperatorKind::Multiply,
                         vec![
                             Expr::Call(
-                                Expr::Identifier("f".into()).into(),
-                                vec![Expr::Identifier("x".into()).into()]
+                                Expr::Identifier(Symbol(0)).into(),
+                                vec![Expr::Identifier(Symbol(1)).into()]
                             ),
                             Expr::Call(
-                                Expr::Identifier("g".into()).into(),
-                                vec![Expr::Identifier("y".into()).into()]
+                                Expr::Identifier(Symbol(2)).into(),
+                                vec![Expr::Identifier(Symbol(3)).into()]
                             ),
                         ]
                     ),
                     Expr::Call(
-                        Expr::Identifier("h".into()).into(),
-                        vec![Expr::Identifier("z".into())]
+                        Expr::Identifier(Symbol(4)).into(),
+                        vec![Expr::Identifier(Symbol(5))]
                     ),
                 ]
             )),
@@ -733,23 +747,23 @@ mod tests {
         assert_eq!(
             parse_expr("x -> x"),
             Ok(Expr::Function(
-                vec![Pattern::Identifier("x".into())],
-                Expr::Identifier("x".into()).into()
+                vec![Pattern::Identifier(Symbol(0))],
+                Expr::Identifier(Symbol(0)).into()
             ))
         );
         assert_eq!(
             parse_expr("x y z -> x y z"),
             Ok(Expr::Function(
                 vec![
-                    Pattern::Identifier("x".into()),
-                    Pattern::Identifier("y".into()),
-                    Pattern::Identifier("z".into()),
+                    Pattern::Identifier(Symbol(0)),
+                    Pattern::Identifier(Symbol(1)),
+                    Pattern::Identifier(Symbol(2)),
                 ],
                 Expr::Call(
-                    Expr::Identifier("x".into()).into(),
+                    Expr::Identifier(Symbol(0)).into(),
                     vec![
-                        Expr::Identifier("y".into()).into(),
-                        Expr::Identifier("z".into()).into(),
+                        Expr::Identifier(Symbol(1)).into(),
+                        Expr::Identifier(Symbol(2)).into(),
                     ]
                 )
                 .into()
@@ -766,12 +780,12 @@ mod tests {
             Ok(Expr::Block(
                 vec![],
                 vec![
-                    Let(Pattern::Identifier("x".into()), Expr::Integer(0).into()),
-                    Let(Pattern::Identifier("y".into()), Expr::Integer(1).into())
+                    Let(Pattern::Identifier(Symbol(0)), Expr::Integer(0).into()),
+                    Let(Pattern::Identifier(Symbol(1)), Expr::Integer(1).into())
                 ],
                 vec![Expr::Vector(vec![
-                    Expr::Identifier("x".into()),
-                    Expr::Identifier("y".into())
+                    Expr::Identifier(Symbol(0)),
+                    Expr::Identifier(Symbol(1))
                 ])]
             ))
         );
@@ -799,17 +813,17 @@ mod tests {
                 vec![],
                 vec![
                     Let(
-                        Pattern::Identifier("a".into()),
+                        Pattern::Identifier(Symbol(0)),
                         Expr::String("test".into()).into()
                     ),
                     Let(
-                        Pattern::Identifier("b".into()),
+                        Pattern::Identifier(Symbol(10)),
                         Expr::String("test".into()).into(),
                     )
                 ],
                 vec![Expr::Tuple(Tuple {
                     tag: None,
-                    positional: vec![Expr::Identifier("a".into()), Expr::Identifier("b".into())],
+                    positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
                     named: vec![],
                 })]
             ))
@@ -826,23 +840,17 @@ mod tests {
                 "#
             ),
             Ok(Expr::Block(
-                vec![
-                    Import("x".into(), "x".into()),
-                    Import("y".into(), "y".into())
-                ],
+                vec![Import(Symbol(0), "x".into()), Import(Symbol(1), "y".into())],
                 vec![Let(
-                    Pattern::Identifier("point".into()),
+                    Pattern::Identifier(Symbol(2)),
                     Expr::Tuple(Tuple {
-                        tag: Some("Point".into()),
-                        positional: vec![
-                            Expr::Identifier("x".into()),
-                            Expr::Identifier("y".into())
-                        ],
+                        tag: Some(Symbol(3)),
+                        positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
                         named: vec![],
                     })
                     .into()
                 )],
-                vec![Expr::Identifier("point".into())]
+                vec![Expr::Identifier(Symbol(2))]
             ))
         );
     }

@@ -9,6 +9,7 @@ use eval::Environment;
 use repl::repl;
 use source::SourceEvent;
 use std::{env, fs, io, path::Path, sync::mpsc, thread};
+
 use watch::watch;
 
 fn main() {

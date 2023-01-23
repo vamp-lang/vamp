@@ -1,11 +1,12 @@
 use crate::parse::{parse, Expr, OperatorKind};
-use std::collections::HashMap;
+use crate::symbol::{Interner, Symbol};
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, PartialEq)]
 pub struct Tuple {
-    pub tag: Option<String>,
+    pub tag: Option<Symbol>,
     pub positional: Vec<Value>,
-    pub named: HashMap<String, Value>,
+    pub named: FxHashMap<Symbol, Value>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -13,7 +14,7 @@ pub enum Value {
     Nil,
     Tuple(Tuple),
     Vector(Vec<Value>),
-    Tag(String),
+    Tag(Symbol),
     String(String),
     Integer(i64),
     Float(f64),
@@ -25,7 +26,7 @@ impl std::fmt::Display for Value {
             Value::Nil => write!(f, "()"),
             Value::Tuple(tuple) => {
                 if let Some(tag) = &tuple.tag {
-                    write!(f, "{}", tag)?;
+                    write!(f, "{:?}", tag)?;
                 }
                 write!(f, "(")?;
                 let mut positional = tuple.positional.iter();
@@ -40,9 +41,9 @@ impl std::fmt::Display for Value {
                     if tuple.positional.len() > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", key, value)?;
+                    write!(f, "{:?}: {}", key, value)?;
                     for (key, value) in named {
-                        write!(f, ", {}: {}", key, value)?;
+                        write!(f, ", {:?}: {}", key, value)?;
                     }
                 }
                 write!(f, ")")
@@ -58,7 +59,8 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
-            Value::Tag(name) => write!(f, "{}", name),
+            // TODO: Standard tag formatting.
+            Value::Tag(name) => write!(f, "{:?}", name),
             // TODO: Standard string formatting.
             Value::String(string) => write!(f, "{:?}", string),
             // TODO: Standard integer formatting.
@@ -69,11 +71,15 @@ impl std::fmt::Display for Value {
     }
 }
 
-pub struct Environment {}
+pub struct Environment {
+    interner: Interner,
+}
 
 impl Environment {
     pub fn new() -> Environment {
-        Environment {}
+        Environment {
+            interner: Interner::new(),
+        }
     }
 
     fn eval_expr(&mut self, expr: &Expr) -> Result<Value, ()> {
@@ -88,7 +94,7 @@ impl Environment {
                 for expr in &tuple.positional {
                     positional.push(self.eval_expr(expr)?);
                 }
-                let mut named = HashMap::new();
+                let mut named = FxHashMap::default();
                 for (key, expr) in &tuple.named {
                     named.insert(key.clone(), self.eval_expr(expr)?);
                 }
@@ -106,7 +112,7 @@ impl Environment {
                 Ok(Value::Vector(values))
             }
             Expr::Identifier(name) => todo!(),
-            Expr::Tag(value) => Ok(Value::Tag(value.clone())),
+            Expr::Tag(value) => Ok(Value::Tag(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Integer(value) => Ok(Value::Integer(*value)),
             Expr::Float(value) => Ok(Value::Float(*value)),
@@ -152,6 +158,7 @@ impl Environment {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, ()> {
-        self.eval_expr(&parse(source).map_err(|_| ())?)
+        let expr = &parse(source, &mut self.interner).map_err(|_| ())?;
+        self.eval_expr(expr)
     }
 }
