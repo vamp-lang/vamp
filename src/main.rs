@@ -10,6 +10,7 @@ use repl::repl;
 use source::SourceEvent;
 use std::{env, fs, io, path::Path, sync::mpsc, thread};
 use watch::watch;
+
 fn main() {
     let args: Vec<_> = env::args().collect();
     let (sender, receiver) = mpsc::channel();

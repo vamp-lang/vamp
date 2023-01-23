@@ -90,11 +90,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn span(&self) -> Span {
-        self.tokens
-            .get(self.index)
-            .unwrap_or(&self.tokens[self.index - 1])
-            .span
+    fn invalid_token(&self) -> Error {
+        Error {
+            kind: ErrorKind::InvalidToken,
+            span: self
+                .tokens
+                .get(self.index)
+                .unwrap_or(&self.tokens[self.index - 1])
+                .span,
+        }
     }
 
     fn parse_identifier(&mut self) -> Option<String> {
@@ -308,13 +312,12 @@ impl<'a, 'b> Parser<'a, 'b> {
         return Ok(None);
     }
 
-    fn parse_imports(&mut self) -> Result<Option<Vec<Import>>> {
+    fn parse_imports(&mut self) -> Result<Vec<Import>> {
         let mut imports = Vec::new();
         if let Some(import_span) = self.accept(TokenKind::Import) {
-            let left_parenthesis_span = self.accept(TokenKind::LeftParenthesis).ok_or(Error {
-                kind: ErrorKind::InvalidToken,
-                span: import_span,
-            })?;
+            let left_parenthesis_span = self
+                .accept(TokenKind::LeftParenthesis)
+                .ok_or_else(|| self.invalid_token())?;
             if let Some(import) = self.parse_import()? {
                 imports.push(import);
                 while self.accept(TokenKind::Comma).is_some() {
@@ -327,10 +330,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
-            Ok(Some(imports))
-        } else {
-            Ok(None)
         }
+        Ok(imports)
     }
 
     fn parse_pattern(&mut self) -> Result<Option<Pattern>> {
@@ -342,20 +343,23 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn parse_let(&mut self) -> Result<Option<Let>> {
-        if let Some(let_span) = self.accept(TokenKind::Let) {
-            let pattern = self.parse_pattern()?.ok_or(Error {
-                kind: ErrorKind::InvalidToken,
-                span: let_span,
-            })?;
-            self.accept(TokenKind::Equals).ok_or(Error {
-                kind: ErrorKind::InvalidToken,
-                span: let_span,
-            })?;
-            let expr = self.parse_expr()?.ok_or(Error {
-                kind: ErrorKind::InvalidToken,
-                span: let_span,
-            })?;
-            Ok(Some(Let(pattern, expr.into())))
+        if self.accept(TokenKind::Let).is_some() {
+            let pattern = self.parse_pattern()?.ok_or_else(|| self.invalid_token())?;
+            let mut arg_patterns = vec![];
+            while let Some(arg_pattern) = self.parse_pattern()? {
+                arg_patterns.push(arg_pattern);
+            }
+            self.accept(TokenKind::Equals)
+                .ok_or_else(|| self.invalid_token())?;
+            let expr = self.parse_expr()?.ok_or_else(|| self.invalid_token())?;
+            if arg_patterns.len() > 0 {
+                Ok(Some(Let(
+                    pattern,
+                    Expr::Function(arg_patterns, expr.into()).into(),
+                )))
+            } else {
+                Ok(Some(Let(pattern, expr.into())))
+            }
         } else {
             Ok(None)
         }
@@ -407,10 +411,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if let Some(expr) = self.parse_expr()? {
                     return Ok(Some(Expr::Function(patterns, expr.into())));
                 } else {
-                    return Err(Error {
-                        kind: ErrorKind::InvalidToken,
-                        span: self.span(),
-                    });
+                    return Err(self.invalid_token());
                 }
             }
         }
@@ -436,10 +437,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     if let Some(right) = self.parse_expr_precedence(right_precedence)? {
                         left = Expr::Operator(kind, vec![left, right]);
                     } else {
-                        return Err(Error {
-                            kind: ErrorKind::InvalidToken,
-                            span: self.span(),
-                        });
+                        return Err(self.invalid_token());
                     }
                 } else {
                     break;
@@ -462,12 +460,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn parse(&mut self) -> Result<Expr> {
-        let imports = if let Some(imports) = self.parse_imports()? {
+        let imports = self.parse_imports()?;
+        if imports.len() > 0 {
             self.accept(TokenKind::Comma);
-            imports
-        } else {
-            Vec::new()
-        };
+        }
         let mut lets = Vec::new();
         if let Some(let_) = self.parse_let()? {
             lets.push(let_);
@@ -486,10 +482,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
             }
         }
-        if exprs.len() > 0 {
-            Ok(Expr::Block(imports, lets, exprs))
-        } else {
+        if exprs.len() == 0 {
             Ok(Expr::Void)
+        } else if exprs.len() == 1 && imports.len() == 0 && lets.len() == 0 {
+            // Elide blocks only used for grouping.
+            Ok(exprs.pop().unwrap())
+        } else {
+            Ok(Expr::Block(imports, lets, exprs))
         }
     }
 }
@@ -774,6 +773,7 @@ mod tests {
     #[test]
     fn test_parse_block() {
         assert_eq!(parse_expr("{}"), Ok(Expr::Void));
+        assert_eq!(parse_expr("{{{{{}}}}}"), Ok(Expr::Void));
         assert_eq!(parse(""), Ok(Expr::Void));
         assert_eq!(
             parse("let x = 0, let y = 1, [x, y]"),
@@ -789,18 +789,7 @@ mod tests {
                 ])]
             ))
         );
-        assert_eq!(
-            parse("{{1}}"),
-            Ok(Expr::Block(
-                vec![],
-                vec![],
-                vec![Expr::Block(
-                    vec![],
-                    vec![],
-                    vec![Expr::Block(vec![], vec![], vec![Expr::Integer(1)])]
-                )]
-            ))
-        );
+        assert_eq!(parse("{{1}}"), Ok(Expr::Integer(1)));
         assert_eq!(
             parse(
                 r#"
@@ -817,7 +806,7 @@ mod tests {
                         Expr::String("test".into()).into()
                     ),
                     Let(
-                        Pattern::Identifier(Symbol(10)),
+                        Pattern::Identifier(Symbol(1)),
                         Expr::String("test".into()).into(),
                     )
                 ],
