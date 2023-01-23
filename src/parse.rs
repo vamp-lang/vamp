@@ -2,14 +2,14 @@ use crate::source::{Error, ErrorKind, Result, Span};
 use crate::symbol::{Interner, Symbol};
 use crate::tokens::{tokenize, Token, TokenKind};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PatternTuple {
     pub tag: Option<Symbol>,
     pub positional: Vec<Pattern>,
     pub named: Vec<(Symbol, Pattern)>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Pattern {
     // TODO: Pattern matching
     //Tuple(PatternTuple),
@@ -18,20 +18,20 @@ pub enum Pattern {
     //Tag(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Import(pub Symbol, pub String);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Let(pub Pattern, pub Box<Expr>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tuple {
     pub tag: Option<Symbol>,
     pub positional: Vec<Expr>,
     pub named: Vec<(Symbol, Expr)>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum OperatorKind {
     Add,
     Subtract,
@@ -39,7 +39,7 @@ pub enum OperatorKind {
     Divide,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Void,
     Nil,

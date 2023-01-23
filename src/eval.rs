@@ -8,6 +8,7 @@ use std::rc::Rc;
 pub enum Error {
     Void,
     UndefinedSymbol(Symbol),
+    LeftHandMustBeFunction,
     ParseError(ParseError),
 }
 
@@ -27,6 +28,7 @@ pub enum Value {
     String(String),
     Integer(i64),
     Float(f64),
+    Function(Vec<Pattern>, Box<Expr>),
 }
 
 impl std::fmt::Display for Value {
@@ -76,6 +78,8 @@ impl std::fmt::Display for Value {
             Value::Integer(value) => write!(f, "{}", value),
             // TODO: Standard float formatting.
             Value::Float(value) => write!(f, "{}", value),
+            // TODO: Standard function formatting.
+            Value::Function(_, _) => write!(f, "[function]"),
         }
     }
 }
@@ -102,7 +106,13 @@ impl Scope {
     }
 
     pub fn lookup(&self, symbol: Symbol) -> Option<&Value> {
-        self.bindings.get(&symbol)
+        self.bindings.get(&symbol).or_else(|| {
+            if let Some(parent) = &self.parent {
+                parent.lookup(symbol)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -118,18 +128,18 @@ impl Environment {
             Expr::Nil => Ok(Value::Nil),
             Expr::Void => Err(Error::Void),
             Expr::Block(imports, lets, exprs) => {
-                let mut child = Rc::new(Scope::new(Some(scope)));
+                let mut child = Rc::new(Scope::new(Some(scope.clone())));
                 for Let(pattern, right) in lets {
                     match pattern {
-                        Pattern::Identifier(name) => {
+                        Pattern::Identifier(symbol) => {
                             let value = self.eval_expr(right, child.clone())?;
-                            Rc::get_mut(&mut child).unwrap().bind(*name, value);
+                            Rc::get_mut(&mut child).unwrap().bind(*symbol, value);
                         }
                     }
                 }
-                self.eval_expr(&exprs[0], child)
+                self.eval_expr(&exprs[0], child.clone())
             }
-            Expr::Function(f, args) => todo!(),
+            Expr::Function(args, expr) => Ok(Value::Function(args.clone(), expr.clone())),
             Expr::Tuple(tuple) => {
                 let mut positional = vec![];
                 for expr in &tuple.positional {
@@ -189,7 +199,24 @@ impl Environment {
                     },
                 }
             }
-            Expr::Call(f, args) => todo!(),
+            Expr::Call(function, exprs) => {
+                let f = self.eval_expr(function, scope.clone())?;
+                match f {
+                    Value::Function(patterns, expr) => {
+                        // TODO: Partial application...
+                        assert!(exprs.len() == patterns.len());
+
+                        // TODO: Other kinds of patterns...
+                        let mut bound_scope = Scope::new(Some(scope.clone()));
+                        for (i, Pattern::Identifier(symbol)) in patterns.iter().enumerate() {
+                            bound_scope.bind(*symbol, self.eval_expr(&exprs[i], scope.clone())?);
+                        }
+
+                        self.eval_expr(&expr, bound_scope.into())
+                    }
+                    _ => Err(Error::LeftHandMustBeFunction),
+                }
+            }
         }
     }
 
