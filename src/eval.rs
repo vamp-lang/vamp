@@ -1,7 +1,15 @@
 use crate::parse::{parse, Expr, Let, OperatorKind, Pattern};
+use crate::source::Error as ParseError;
 use crate::symbol::{Interner, Symbol};
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
+
+#[derive(Debug)]
+pub enum Error {
+    Void,
+    UndefinedSymbol(Symbol),
+    ParseError(ParseError),
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tuple {
@@ -105,11 +113,10 @@ impl Environment {
         }
     }
 
-    fn eval_expr(&mut self, expr: &Expr, scope: Rc<Scope>) -> Result<Value, ()> {
+    fn eval_expr(&mut self, expr: &Expr, scope: Rc<Scope>) -> Result<Value, Error> {
         match expr {
             Expr::Nil => Ok(Value::Nil),
-            // TODO: This is broken, program should halt.
-            Expr::Void => Ok(Value::Nil),
+            Expr::Void => Err(Error::Void),
             Expr::Block(imports, lets, exprs) => {
                 let mut child = Rc::new(Scope::new(Some(scope)));
                 for Let(pattern, right) in lets {
@@ -145,11 +152,10 @@ impl Environment {
                 }
                 Ok(Value::Vector(values))
             }
-            // TODO: Throw error on undefined symbol
-            Expr::Identifier(symbol) => Ok(scope
-                .lookup(*symbol)
-                .map(|value| value.clone())
-                .unwrap_or(Value::Nil)),
+            Expr::Identifier(symbol) => match scope.lookup(*symbol) {
+                Some(value) => Ok(value.clone()),
+                None => Err(Error::UndefinedSymbol(*symbol)),
+            },
             Expr::Tag(value) => Ok(Value::Tag(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Integer(value) => Ok(Value::Integer(*value)),
@@ -164,22 +170,22 @@ impl Environment {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a + b)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a + b)),
                         [Value::String(a), Value::String(b)] => Ok(Value::String(a.clone() + b)),
-                        _ => Err(()),
+                        _ => Err(Error::Void),
                     },
                     OperatorKind::Subtract => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a - b)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a - b)),
-                        _ => Err(()),
+                        _ => Err(Error::Void),
                     },
                     OperatorKind::Multiply => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a * b)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a * b)),
-                        _ => Err(()),
+                        _ => Err(Error::Void),
                     },
                     OperatorKind::Divide => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a / b)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a / b)),
-                        _ => Err(()),
+                        _ => Err(Error::Void),
                     },
                 }
             }
@@ -187,8 +193,8 @@ impl Environment {
         }
     }
 
-    pub fn eval(&mut self, source: &str) -> Result<Value, ()> {
-        let expr = &parse(source, &mut self.interner).map_err(|_| ())?;
+    pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
+        let expr = &parse(source, &mut self.interner).map_err(|error| Error::ParseError(error))?;
         self.eval_expr(expr, Scope::new(None).into())
     }
 }
