@@ -19,10 +19,10 @@ pub enum Pattern {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Import(Symbol, String);
+pub struct Import(pub Symbol, pub String);
 
 #[derive(Debug, PartialEq)]
-pub struct Let(Pattern, Box<Expr>);
+pub struct Let(pub Pattern, pub Box<Expr>);
 
 #[derive(Debug, PartialEq)]
 pub struct Tuple {

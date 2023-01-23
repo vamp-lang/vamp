@@ -1,15 +1,16 @@
-use crate::parse::{parse, Expr, OperatorKind};
+use crate::parse::{parse, Expr, Let, OperatorKind, Pattern};
 use crate::symbol::{Interner, Symbol};
 use rustc_hash::FxHashMap;
+use std::rc::Rc;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tuple {
     pub tag: Option<Symbol>,
     pub positional: Vec<Value>,
     pub named: FxHashMap<Symbol, Value>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Nil,
     Tuple(Tuple),
@@ -75,6 +76,28 @@ pub struct Environment {
     interner: Interner,
 }
 
+pub struct Scope {
+    parent: Option<Rc<Scope>>,
+    bindings: FxHashMap<Symbol, Value>,
+}
+
+impl Scope {
+    pub fn new(parent: Option<Rc<Scope>>) -> Self {
+        Scope {
+            parent,
+            bindings: FxHashMap::default(),
+        }
+    }
+
+    pub fn bind(&mut self, symbol: Symbol, value: Value) {
+        self.bindings.insert(symbol, value);
+    }
+
+    pub fn lookup(&self, symbol: Symbol) -> Option<&Value> {
+        self.bindings.get(&symbol)
+    }
+}
+
 impl Environment {
     pub fn new() -> Environment {
         Environment {
@@ -82,21 +105,32 @@ impl Environment {
         }
     }
 
-    fn eval_expr(&mut self, expr: &Expr) -> Result<Value, ()> {
+    fn eval_expr(&mut self, expr: &Expr, scope: Rc<Scope>) -> Result<Value, ()> {
         match expr {
             Expr::Nil => Ok(Value::Nil),
             // TODO: This is broken, program should halt.
             Expr::Void => Ok(Value::Nil),
-            Expr::Block(imports, lets, exprs) => self.eval_expr(&exprs[0]),
+            Expr::Block(imports, lets, exprs) => {
+                let mut child = Rc::new(Scope::new(Some(scope)));
+                for Let(pattern, right) in lets {
+                    match pattern {
+                        Pattern::Identifier(name) => {
+                            let value = self.eval_expr(right, child.clone())?;
+                            Rc::get_mut(&mut child).unwrap().bind(*name, value);
+                        }
+                    }
+                }
+                self.eval_expr(&exprs[0], child)
+            }
             Expr::Function(f, args) => todo!(),
             Expr::Tuple(tuple) => {
                 let mut positional = vec![];
                 for expr in &tuple.positional {
-                    positional.push(self.eval_expr(expr)?);
+                    positional.push(self.eval_expr(expr, scope.clone())?);
                 }
                 let mut named = FxHashMap::default();
                 for (key, expr) in &tuple.named {
-                    named.insert(key.clone(), self.eval_expr(expr)?);
+                    named.insert(key.clone(), self.eval_expr(expr, scope.clone())?);
                 }
                 Ok(Value::Tuple(Tuple {
                     tag: tuple.tag.clone(),
@@ -107,11 +141,15 @@ impl Environment {
             Expr::Vector(exprs) => {
                 let mut values = vec![];
                 for expr in exprs {
-                    values.push(self.eval_expr(expr)?);
+                    values.push(self.eval_expr(expr, scope.clone())?);
                 }
                 Ok(Value::Vector(values))
             }
-            Expr::Identifier(name) => todo!(),
+            // TODO: Throw error on undefined symbol
+            Expr::Identifier(symbol) => Ok(scope
+                .lookup(*symbol)
+                .map(|value| value.clone())
+                .unwrap_or(Value::Nil)),
             Expr::Tag(value) => Ok(Value::Tag(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Integer(value) => Ok(Value::Integer(*value)),
@@ -119,35 +157,27 @@ impl Environment {
             Expr::Operator(kind, operands) => {
                 let mut values = vec![];
                 for value in operands {
-                    values.push(self.eval_expr(value)?);
+                    values.push(self.eval_expr(value, scope.clone())?);
                 }
                 match kind {
                     OperatorKind::Add => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a + b)),
-                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 + b)),
-                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a + *b as f64)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a + b)),
                         [Value::String(a), Value::String(b)] => Ok(Value::String(a.clone() + b)),
                         _ => Err(()),
                     },
                     OperatorKind::Subtract => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a - b)),
-                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 - b)),
-                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a - *b as f64)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a - b)),
                         _ => Err(()),
                     },
                     OperatorKind::Multiply => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a * b)),
-                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 * b)),
-                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a * *b as f64)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a * b)),
                         _ => Err(()),
                     },
                     OperatorKind::Divide => match &values[..] {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a / b)),
-                        [Value::Integer(a), Value::Float(b)] => Ok(Value::Float(*a as f64 / b)),
-                        [Value::Float(a), Value::Integer(b)] => Ok(Value::Float(a / *b as f64)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a / b)),
                         _ => Err(()),
                     },
@@ -159,6 +189,6 @@ impl Environment {
 
     pub fn eval(&mut self, source: &str) -> Result<Value, ()> {
         let expr = &parse(source, &mut self.interner).map_err(|_| ())?;
-        self.eval_expr(expr)
+        self.eval_expr(expr, Scope::new(None).into())
     }
 }
