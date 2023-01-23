@@ -180,6 +180,11 @@ impl Environment {
                         [Value::Integer(a), Value::Integer(b)] => Ok(Value::Integer(a + b)),
                         [Value::Float(a), Value::Float(b)] => Ok(Value::Float(a + b)),
                         [Value::String(a), Value::String(b)] => Ok(Value::String(a.clone() + b)),
+                        [Value::Vector(a), Value::Vector(b)] => Ok(Value::Vector({
+                            let mut sum = a.clone();
+                            sum.extend(b.clone());
+                            sum
+                        })),
                         _ => Err(Error::Void),
                     },
                     OperatorKind::Subtract => match &values[..] {
