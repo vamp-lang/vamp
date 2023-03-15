@@ -41,6 +41,19 @@ let two = (1, 2)
 let three = (1, 2, 3)
 let named = (age: 24, firstName: "Ethan")
 
+let x = (
+  let z = 10
+  let w = 20
+  let z = {}
+  let w = ()
+
+  let pattern = Regex {
+    (?P<year>\d{4})-
+    (?P<month>\d{2})-
+    (?P<day>\d{2})
+  }
+)
+/
 # Tagged tuples
 #
 # Tuples can be optionally prefixed with a "tag" starting with an

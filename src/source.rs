@@ -1,36 +1,29 @@
 use std::{ops::Index, path::PathBuf};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Position {
-    pub offset: usize,
-    pub line: usize,
-    pub column: usize,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
 pub struct Span {
-    pub start: Position,
-    pub end: Position,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl Index<Span> for str {
     type Output = str;
 
-    #[inline(always)]
-    fn index(&self, index: Span) -> &str {
-        &self[index.start.offset..index.end.offset]
+    #[inline]
+    fn index(&self, span: Span) -> &str {
+        &self[span.start..span.end]
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ErrorKind {
-    UnterminatedString,
-    InvalidEscapeSequence,
-    InvalidInteger,
-    InvalidFloat,
     UnbalancedDelimiters,
     InvalidCharacter,
     InvalidToken,
+    StringUnterminated,
+    StringInvalidEscapeSequence,
+    IntegerInvalid,
+    FloatInvalid,
     TuplePositionalAfterNamed,
 }
 

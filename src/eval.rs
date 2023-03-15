@@ -1,6 +1,7 @@
 use crate::parse::{parse, Expr, Let, OperatorKind, Pattern};
 use crate::source::Error as ParseError;
 use crate::symbol::{Interner, Symbol};
+use bumpalo::Bump;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
@@ -14,7 +15,7 @@ pub enum Error {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tuple {
-    pub tag: Option<Symbol>,
+    pub symbol: Option<Symbol>,
     pub positional: Vec<Value>,
     pub named: FxHashMap<Symbol, Value>,
 }
@@ -24,7 +25,7 @@ pub enum Value {
     Nil,
     Tuple(Tuple),
     Vector(Vec<Value>),
-    Tag(Symbol),
+    Symbol(Symbol),
     String(String),
     Integer(i64),
     Float(f64),
@@ -36,8 +37,8 @@ impl std::fmt::Display for Value {
         match self {
             Value::Nil => write!(f, "()"),
             Value::Tuple(tuple) => {
-                if let Some(tag) = &tuple.tag {
-                    write!(f, "{:?}", tag)?;
+                if let Some(symbol) = &tuple.symbol {
+                    write!(f, "{:?}", symbol)?;
                 }
                 write!(f, "(")?;
                 let mut positional = tuple.positional.iter();
@@ -70,8 +71,8 @@ impl std::fmt::Display for Value {
                 }
                 write!(f, "]")
             }
-            // TODO: Standard tag formatting.
-            Value::Tag(name) => write!(f, "{:?}", name),
+            // TODO: Standard symbol formatting.
+            Value::Symbol(name) => write!(f, "{:?}", name),
             // TODO: Standard string formatting.
             Value::String(string) => write!(f, "{:?}", string),
             // TODO: Standard integer formatting.
@@ -150,7 +151,7 @@ impl Environment {
                     named.insert(key.clone(), self.eval_expr(expr, scope.clone())?);
                 }
                 Ok(Value::Tuple(Tuple {
-                    tag: tuple.tag.clone(),
+                    symbol: tuple.symbol.clone(),
                     positional,
                     named,
                 }))
@@ -166,9 +167,9 @@ impl Environment {
                 Some(value) => Ok(value.clone()),
                 None => Err(Error::UndefinedSymbol(*symbol)),
             },
-            Expr::Tag(value) => Ok(Value::Tag(*value)),
+            Expr::Symbol(value) => Ok(Value::Symbol(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
-            Expr::Integer(value) => Ok(Value::Integer(*value)),
+            Expr::Int(value) => Ok(Value::Integer(*value)),
             Expr::Float(value) => Ok(Value::Float(*value)),
             Expr::Operator(kind, operands) => {
                 let mut values = vec![];
@@ -226,7 +227,9 @@ impl Environment {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
-        let expr = &parse(source, &mut self.interner).map_err(|error| Error::ParseError(error))?;
+        let bump = Bump::new();
+        let expr =
+            &parse(source, &bump, &mut self.interner).map_err(|error| Error::ParseError(error))?;
         self.eval_expr(expr, Scope::new(None).into())
     }
 }

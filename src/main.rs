@@ -1,9 +1,10 @@
+mod ast;
 mod eval;
+mod lex;
 mod parse;
 mod repl;
 mod source;
 mod symbol;
-mod tokens;
 mod watch;
 use eval::Environment;
 use repl::repl;

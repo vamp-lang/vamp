@@ -1,0 +1,11 @@
+[package]
+name = "a"
+author = "ethanlynn0709@gmail.com"
+description = "abc"
+
+[dependencies]
+api = "*"
+
+[targets]
+api = { root = "api", target = "native" }
+web = { root = "web", target = "web" }

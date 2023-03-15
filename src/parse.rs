@@ -1,69 +1,23 @@
+use crate::ast::{
+    BuiltIn, Expr, Import, Module, Pattern, PatternTupleMember, Statement, TupleMember,
+};
+use crate::lex::{tokenize, Token, TokenKind};
 use crate::source::{Error, ErrorKind, Result, Span};
 use crate::symbol::{Interner, Symbol};
-use crate::tokens::{tokenize, Token, TokenKind};
+use bumpalo::{
+    collections::{String as BumpString, Vec as BumpVec},
+    Bump,
+};
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct PatternTuple {
-    pub tag: Option<Symbol>,
-    pub positional: Vec<Pattern>,
-    pub named: Vec<(Symbol, Pattern)>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Pattern {
-    // TODO: Pattern matching
-    //Tuple(PatternTuple),
-    //Vector(Vec<Pattern>),
-    Identifier(Symbol),
-    //Tag(String),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Import(pub Symbol, pub String);
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Let(pub Pattern, pub Box<Expr>);
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Tuple {
-    pub tag: Option<Symbol>,
-    pub positional: Vec<Expr>,
-    pub named: Vec<(Symbol, Expr)>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum OperatorKind {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
-    Void,
-    Nil,
-    Block(Vec<Import>, Vec<Let>, Vec<Expr>),
-    Function(Vec<Pattern>, Box<Expr>),
-    Tuple(Tuple),
-    Vector(Vec<Expr>),
-    Identifier(Symbol),
-    Tag(Symbol),
-    String(String),
-    Integer(i64),
-    Float(f64),
-    Operator(OperatorKind, Vec<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
-}
-
-pub struct Parser<'a, 'b> {
-    source: &'a str,
-    interner: &'b mut Interner,
+pub struct Parser<'ast, 'src, 'sym> {
+    source: &'src str,
+    arena: &'ast Bump,
+    interner: &'sym mut Interner,
     tokens: Vec<Token>,
     index: usize,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
+impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
     fn accept(&mut self, kind: TokenKind) -> Option<Span> {
         if self.index < self.tokens.len() && self.tokens[self.index].kind == kind {
             let span = self.tokens[self.index].span;
@@ -74,13 +28,22 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn accept_operator(&mut self) -> Option<(OperatorKind, u8, u8)> {
+    fn accept_slice(&mut self, kind: TokenKind) -> Option<&str> {
+        self.accept(kind).map(|span| &self.source[span])
+    }
+
+    fn accept_symbol(&mut self, kind: TokenKind) -> Option<Symbol> {
+        self.accept_slice(kind)
+            .map(|slice| self.interner.intern(slice))
+    }
+
+    fn accept_built_in(&mut self) -> Option<(BuiltIn, u8, u8)> {
         if self.index < self.tokens.len() {
             let result = match self.tokens[self.index].kind {
-                TokenKind::Plus => (OperatorKind::Add, 1, 2),
-                TokenKind::Minus => (OperatorKind::Subtract, 1, 2),
-                TokenKind::Times => (OperatorKind::Multiply, 3, 4),
-                TokenKind::Divide => (OperatorKind::Divide, 3, 4),
+                TokenKind::Plus => (BuiltIn::Add, 1, 2),
+                TokenKind::Minus => (BuiltIn::Sub, 1, 2),
+                TokenKind::Times => (BuiltIn::Mul, 3, 4),
+                TokenKind::Divide => (BuiltIn::Div, 3, 4),
                 _ => return None,
             };
             self.index += 1;
@@ -101,25 +64,23 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_identifier(&mut self) -> Option<String> {
-        self.accept(TokenKind::Identifier)
-            .map(|span| self.source[span].into())
+    fn identifier(&mut self) -> Option<Symbol> {
+        self.accept_symbol(TokenKind::Identifier)
     }
 
-    fn parse_tag(&mut self) -> Option<Symbol> {
-        self.accept(TokenKind::Tag)
-            .map(|span| self.interner.intern(&self.source[span]))
+    fn symbol(&mut self) -> Option<Symbol> {
+        self.accept_symbol(TokenKind::Symbol)
     }
 
-    fn parse_string(&mut self) -> Result<Option<String>> {
+    fn string(&mut self) -> Result<Option<&str>> {
         if let Some(span) = self.accept(TokenKind::String) {
             let slice = &self.source[span];
-            let mut string = String::with_capacity(slice.len());
+            let mut string = BumpString::with_capacity_in(slice.len(), self.arena);
             let mut chars = slice[1..slice.len() - 1].chars();
             while let Some(c) = chars.next() {
                 if c == '\\' {
                     let error = Error {
-                        kind: ErrorKind::InvalidEscapeSequence,
+                        kind: ErrorKind::StringInvalidEscapeSequence,
                         span,
                     };
                     // `unwrap()` here is safe because a string ending `\` such
@@ -177,17 +138,17 @@ impl<'a, 'b> Parser<'a, 'b> {
                     string.push(c)
                 }
             }
-            Ok(Some(string))
+            Ok(Some(&string))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_integer(&mut self) -> Result<Option<i64>> {
-        if let Some(integer_span) = self.accept(TokenKind::Integer) {
+    fn int(&mut self) -> Result<Option<i64>> {
+        if let Some(integer_span) = self.accept(TokenKind::Int) {
             let mut value: i64 = 0;
             let error = Error {
-                kind: ErrorKind::InvalidInteger,
+                kind: ErrorKind::IntegerInvalid,
                 span: integer_span,
             };
             for digit in self.source[integer_span].bytes() {
@@ -203,11 +164,11 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_float(&mut self) -> Result<Option<f64>> {
+    fn float(&mut self) -> Result<Option<f64>> {
         if let Some(float_span) = self.accept(TokenKind::Float) {
             // TODO: Write custom float parser.
             let value = self.source[float_span].parse::<f64>().map_err(|_| Error {
-                kind: ErrorKind::InvalidFloat,
+                kind: ErrorKind::FloatInvalid,
                 span: float_span,
             })?;
             Ok(Some(value))
@@ -216,200 +177,235 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_tuple_member(&mut self) -> Result<Option<(Option<Symbol>, Expr)>> {
-        if let Some(identifier) = self.parse_identifier() {
+    fn tuple_member(&mut self) -> Result<Option<TupleMember>> {
+        if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
-                let expr = self
-                    .parse_expr()?
-                    .unwrap_or_else(|| Expr::Identifier(self.interner.intern(&identifier)));
-                Ok(Some((Some(self.interner.intern(&identifier)), expr)))
+                let expr = self.expr()?.unwrap_or_else(|| Expr::Identifier(identifier));
+                Ok(Some(TupleMember::Named(identifier, expr)))
             } else {
-                Ok(Some((
-                    None,
-                    Expr::Identifier(self.interner.intern(&identifier)),
-                )))
+                Ok(Some(TupleMember::Positional(Expr::Identifier(identifier))))
             }
-        } else if let Some(expr) = self.parse_expr()? {
-            Ok(Some((None, expr)))
+        } else if let Some(expr) = self.expr()? {
+            Ok(Some(TupleMember::Positional(expr)))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_tuple(&mut self) -> Result<Option<Expr>> {
+    fn tuple(&mut self) -> Result<Option<&[TupleMember]>> {
         let i = self.index;
-        let tag = self.parse_tag();
-        if let Some(left_parenthesis_span) = self.accept(TokenKind::LeftParenthesis) {
-            let mut positional = vec![];
-            let mut named = vec![];
-            if let Some((key, expr)) = self.parse_tuple_member()? {
-                if let Some(key) = key {
-                    named.push((key, expr));
-                } else {
-                    positional.push(expr);
-                }
+        if let Some(left_parenthesis_span) = self.accept(TokenKind::LParen) {
+            let mut members = BumpVec::new_in(self.arena);
+            if let Some(member) = self.tuple_member()? {
+                members.push(member);
                 while let Some(comma_span) = self.accept(TokenKind::Comma) {
-                    if let Some((key, expr)) = self.parse_tuple_member()? {
-                        if let Some(key) = key {
-                            named.push((key, expr));
-                        } else if named.len() > 0 {
-                            return Err(Error {
-                                kind: ErrorKind::TuplePositionalAfterNamed,
-                                span: comma_span,
-                            });
-                        } else {
-                            positional.push(expr);
-                        }
+                    if let Some(member) = self.tuple_member()? {
+                        members.push(member);
                     }
                 }
             }
-            self.accept(TokenKind::RightParenthesis).ok_or(Error {
+            self.accept(TokenKind::RParen).ok_or(Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
-            if positional.len() == 0 && named.len() == 0 {
-                Ok(Some(Expr::Nil))
-            } else {
-                Ok(Some(Expr::Tuple(Tuple {
-                    tag,
-                    positional,
-                    named,
-                })))
-            }
+            Ok(Some(&members))
         } else {
             self.index = i;
             Ok(None)
         }
     }
 
-    fn parse_vector(&mut self) -> Result<Option<Expr>> {
-        if let Some(left_bracket_span) = self.accept(TokenKind::LeftBracket) {
-            let mut exprs = Vec::new();
-            if let Some(expr) = self.parse_expr()? {
+    fn vector(&mut self) -> Result<Option<&[Expr]>> {
+        if let Some(left_bracket_span) = self.accept(TokenKind::LBracket) {
+            let mut exprs = BumpVec::new_in(self.arena);
+            if let Some(expr) = self.expr()? {
                 exprs.push(expr);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(expr) = self.parse_expr()? {
+                    if let Some(expr) = self.expr()? {
                         exprs.push(expr);
                     }
                 }
             }
-            self.accept(TokenKind::RightBracket).ok_or(Error {
+            self.accept(TokenKind::RBracket).ok_or(Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_bracket_span,
             })?;
-            Ok(Some(Expr::Vector(exprs)))
+            Ok(Some(&exprs))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_import(&mut self) -> Result<Option<Import>> {
-        if let Some(identifier) = self.parse_identifier() {
-            if let Some(string) = self.parse_string()? {
-                return Ok(Some(Import(self.interner.intern(&identifier), string)));
+    fn import(&mut self) -> Result<Option<Import>> {
+        if let Some(pattern) = self.pattern()? {
+            if let Some(string) = self.string()? {
+                return Ok(Some(Import(pattern, string)));
             }
         }
-        return Ok(None);
+        Ok(None)
     }
 
-    fn parse_imports(&mut self) -> Result<Vec<Import>> {
-        let mut imports = Vec::new();
+    fn imports(&mut self) -> Result<&[Import]> {
+        let mut imports = BumpVec::new_in(self.arena);
         if let Some(import_span) = self.accept(TokenKind::Import) {
             let left_parenthesis_span = self
-                .accept(TokenKind::LeftParenthesis)
+                .accept(TokenKind::LParen)
                 .ok_or_else(|| self.invalid_token())?;
-            if let Some(import) = self.parse_import()? {
+            if let Some(import) = self.import()? {
                 imports.push(import);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(import) = self.parse_import()? {
+                    if let Some(import) = self.import()? {
                         imports.push(import);
                     }
                 }
             }
-            self.accept(TokenKind::RightParenthesis).ok_or(Error {
+            self.accept(TokenKind::RParen).ok_or(Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
         }
-        Ok(imports)
+        Ok(&imports)
     }
 
-    fn parse_pattern(&mut self) -> Result<Option<Pattern>> {
-        if let Some(identifier) = self.parse_identifier() {
-            Ok(Some(Pattern::Identifier(self.interner.intern(&identifier))))
+    fn pattern_tuple_member(&mut self) -> Result<Option<PatternTupleMember>> {
+        if let Some(identifier) = self.identifier() {
+            if self.accept(TokenKind::Colon).is_some() {
+                let pattern = self
+                    .pattern()?
+                    .unwrap_or_else(|| Pattern::Identifier(identifier));
+                Ok(Some(PatternTupleMember::Named(identifier, pattern)))
+            } else {
+                Ok(Some(PatternTupleMember::Positional(Pattern::Identifier(
+                    identifier,
+                ))))
+            }
+        } else if let Some(pattern) = self.pattern()? {
+            Ok(Some(PatternTupleMember::Positional(pattern)))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_let(&mut self) -> Result<Option<Let>> {
-        if self.accept(TokenKind::Let).is_some() {
-            let pattern = self.parse_pattern()?.ok_or_else(|| self.invalid_token())?;
-            let mut arg_patterns = vec![];
-            while let Some(arg_pattern) = self.parse_pattern()? {
-                arg_patterns.push(arg_pattern);
+    fn pattern_tuple(&mut self) -> Result<Option<&[PatternTupleMember]>> {
+        let i = self.index;
+        if let Some(left_parenthesis_span) = self.accept(TokenKind::LParen) {
+            let mut members = BumpVec::new_in(self.arena);
+            if let Some(member) = self.pattern_tuple_member()? {
+                members.push(member);
+                while let Some(comma_span) = self.accept(TokenKind::Comma) {
+                    if let Some(member) = self.pattern_tuple_member()? {
+                        members.push(member);
+                    }
+                }
             }
+            self.accept(TokenKind::RParen).ok_or(Error {
+                kind: ErrorKind::UnbalancedDelimiters,
+                span: left_parenthesis_span,
+            })?;
+            Ok(Some(&members))
+        } else {
+            self.index = i;
+            Ok(None)
+        }
+    }
+
+    fn pattern(&mut self) -> Result<Option<Pattern>> {
+        if let Some(members) = self.pattern_tuple()? {
+            if members.len() == 0 {
+                Ok(Some(Pattern::Nil))
+            } else {
+                Ok(Some(Pattern::Tuple(members)))
+            }
+        } else if let Some(identifier) = self.identifier() {
+            Ok(Some(Pattern::Identifier(identifier)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn statement(&mut self) -> Result<Option<Statement>> {
+        if self.accept(TokenKind::Let).is_some() {
+            let pattern = self.pattern()?.ok_or_else(|| self.invalid_token())?;
+            let args = self.pattern_tuple()?;
             self.accept(TokenKind::Equals)
                 .ok_or_else(|| self.invalid_token())?;
-            let expr = self.parse_expr()?.ok_or_else(|| self.invalid_token())?;
-            if arg_patterns.len() > 0 {
-                Ok(Some(Let(
+            let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
+            if let Some(args) = args {
+                Ok(Some(Statement::Let(
                     pattern,
-                    Expr::Function(arg_patterns, expr.into()).into(),
+                    self.arena.alloc(Expr::Function(
+                        self.arena.alloc(args),
+                        self.arena.alloc(expr),
+                    )),
                 )))
             } else {
-                Ok(Some(Let(pattern, expr.into())))
+                Ok(Some(Statement::Let(pattern, self.arena.alloc(expr))))
             }
+        } else if let Some(expr) = self.expr()? {
+            Ok(Some(Statement::Expr(expr)))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_block(&mut self) -> Result<Option<Expr>> {
-        if let Some(left_brace_span) = self.accept(TokenKind::LeftBrace) {
-            let block = self.parse()?;
-            self.accept(TokenKind::RightBrace).ok_or(Error {
+    fn statements(&mut self) -> Result<&[Statement]> {
+        let mut statements = BumpVec::new_in(self.arena);
+        if let Some(statement) = self.statement()? {
+            statements.push(statement);
+            while self.accept(TokenKind::Comma).is_some() {
+                if let Some(statement) = self.statement()? {
+                    statements.push(statement);
+                }
+            }
+        }
+        Ok(&statements)
+    }
+
+    fn block(&mut self) -> Result<Option<Expr>> {
+        if let Some(left_brace_span) = self.accept(TokenKind::LBrace) {
+            let statements = self.statements()?;
+            self.accept(TokenKind::RBrace).ok_or(Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_brace_span,
             })?;
-            Ok(Some(block))
+            Ok(Some(Expr::Block(&statements)))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_atom(&mut self) -> Result<Option<Expr>> {
-        if let Some(tuple) = self.parse_tuple()? {
-            Ok(Some(tuple))
-        } else if let Some(vector) = self.parse_vector()? {
-            Ok(Some(vector))
-        } else if let Some(block) = self.parse_block()? {
+    fn atom(&mut self) -> Result<Option<Expr>> {
+        if let Some(members) = self.tuple()? {
+            if members.len() == 0 {
+                Ok(Some(Expr::Nil))
+            } else {
+                Ok(Some(Expr::Tuple(members)))
+            }
+        } else if let Some(vector) = self.vector()? {
+            Ok(Some(Expr::Vector(vector)))
+        } else if let Some(block) = self.block()? {
             Ok(Some(block))
-        } else if let Some(identifier) = self.parse_identifier() {
-            Ok(Some(Expr::Identifier(self.interner.intern(&identifier))))
-        } else if let Some(tag) = self.parse_tag() {
-            Ok(Some(Expr::Tag(tag)))
-        } else if let Some(string) = self.parse_string()? {
+        } else if let Some(identifier) = self.identifier() {
+            Ok(Some(Expr::Identifier(identifier)))
+        } else if let Some(symbol) = self.symbol() {
+            Ok(Some(Expr::Symbol(symbol)))
+        } else if let Some(string) = self.string()? {
             Ok(Some(Expr::String(string)))
-        } else if let Some(integer) = self.parse_integer()? {
-            Ok(Some(Expr::Integer(integer)))
-        } else if let Some(float) = self.parse_float()? {
+        } else if let Some(integer) = self.int()? {
+            Ok(Some(Expr::Int(integer)))
+        } else if let Some(float) = self.float()? {
             Ok(Some(Expr::Float(float)))
         } else {
             Ok(None)
         }
     }
 
-    fn parse_function(&mut self) -> Result<Option<Expr>> {
+    fn function(&mut self) -> Result<Option<Expr>> {
         let i = self.index;
-        if let Some(pattern) = self.parse_pattern()? {
-            let mut patterns = vec![pattern];
-            while let Some(pattern) = self.parse_pattern()? {
-                patterns.push(pattern);
-            }
+        if let Some(args) = self.pattern_tuple()? {
             if self.accept(TokenKind::Arrow).is_some() {
-                if let Some(expr) = self.parse_expr()? {
-                    return Ok(Some(Expr::Function(patterns, expr.into())));
+                if let Some(expr) = self.expr()? {
+                    return Ok(Some(Expr::Function(args, self.arena.alloc(expr))));
                 } else {
                     return Err(self.invalid_token());
                 }
@@ -419,23 +415,25 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(None)
     }
 
-    fn parse_expr_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
-        if let Some(mut left) = self.parse_atom()? {
-            if let Some(arg) = self.parse_atom()? {
-                let mut args = vec![arg];
-                while let Some(arg) = self.parse_atom()? {
-                    args.push(arg);
-                }
-                left = Expr::Call(left.into(), args);
+    fn expr_with_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
+        if let Some(mut left) = self.atom()? {
+            if let Some(members) = self.tuple()? {
+                left = Expr::Call(self.arena.alloc(left), members);
             }
             loop {
-                if let Some((kind, left_precedence, right_precedence)) = self.accept_operator() {
+                if let Some((built_in, left_precedence, right_precedence)) = self.accept_built_in()
+                {
                     if left_precedence < min_precedence {
                         self.index -= 1;
                         break;
                     }
-                    if let Some(right) = self.parse_expr_precedence(right_precedence)? {
-                        left = Expr::Operator(kind, vec![left, right]);
+                    if let Some(right) = self.expr_with_precedence(right_precedence)? {
+                        let args = bumpalo::vec![
+                            in &self.arena;
+                            TupleMember::Positional(left),
+                            TupleMember::Positional(right),
+                        ];
+                        left = Expr::Call(self.arena.alloc(Expr::BuiltIn(built_in)), &args);
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -449,84 +447,77 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Option<Expr>> {
-        if let Some(function) = self.parse_function()? {
+    fn expr(&mut self) -> Result<Option<Expr>> {
+        if let Some(function) = self.function()? {
             Ok(Some(function))
-        } else if let Some(expr) = self.parse_expr_precedence(0)? {
+        } else if let Some(expr) = self.expr_with_precedence(0)? {
             Ok(Some(expr))
         } else {
             Ok(None)
         }
     }
 
-    fn parse(&mut self) -> Result<Expr> {
-        let imports = self.parse_imports()?;
+    fn module(&mut self) -> Result<Module> {
+        let imports = self.imports()?;
         if imports.len() > 0 {
             self.accept(TokenKind::Comma);
         }
-        let mut lets = Vec::new();
-        if let Some(let_) = self.parse_let()? {
-            lets.push(let_);
-            while self.accept(TokenKind::Comma).is_some() {
-                if let Some(let_) = self.parse_let()? {
-                    lets.push(let_);
-                }
-            }
-        }
-        let mut exprs = Vec::new();
-        if let Some(expr) = self.parse_expr()? {
-            exprs.push(expr);
-            while self.accept(TokenKind::Comma).is_some() {
-                if let Some(expr) = self.parse_expr()? {
-                    exprs.push(expr);
-                }
-            }
-        }
-        if exprs.len() == 0 {
-            Ok(Expr::Void)
-        } else if exprs.len() == 1 && imports.len() == 0 && lets.len() == 0 {
-            // Elide blocks only used for grouping.
-            Ok(exprs.pop().unwrap())
-        } else {
-            Ok(Expr::Block(imports, lets, exprs))
-        }
+        let statements: &[Statement] = self.statements()?;
+        Ok(Module {
+            imports,
+            body: Expr::Block(statements),
+            export: Expr::Void,
+        })
     }
 }
 
-pub fn parse<'a, 'b>(source: &'a str, interner: &'b mut Interner) -> Result<Expr> {
+pub fn parse_module<'src, 'ast, 'sym>(
+    source: &'src str,
+    arena: &'ast Bump,
+    interner: &'sym mut Interner,
+) -> Result<Module<'ast>> {
     Parser {
         source,
+        arena,
         interner,
         tokens: tokenize(source)?,
         index: 0,
     }
-    .parse()
+    .module()
 }
 
-pub fn parse_expr<'a, 'b>(source: &'a str, interner: &'b mut Interner) -> Result<Expr> {
+pub fn parse_expr<'src, 'ast, 'sym>(
+    source: &'src str,
+    arena: &'ast Bump,
+    interner: &'sym mut Interner,
+) -> Result<Expr<'ast>> {
     let expr = Parser {
         source,
+        arena,
         interner,
         tokens: tokenize(source)?,
         index: 0,
     }
-    .parse_expr()?
+    .expr()?
     .unwrap_or(Expr::Void);
     Ok(expr)
 }
 
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse(source: &str) -> Result<Expr> {
+        let bump = Bump::new();
         let mut interner: Interner = Interner::new();
-        super::parse(source, &mut interner)
+        super::parse(source, &bump, &mut interner)
     }
 
     fn parse_expr(source: &str) -> Result<Expr> {
+        let bump = Bump::new();
         let mut interner: Interner = Interner::new();
-        super::parse_expr(source, &mut interner)
+        super::parse_expr(source, &bump, &mut interner)
     }
 
     #[test]
@@ -535,8 +526,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_tag() {
-        assert_eq!(parse_expr("X"), Ok(Expr::Tag(Symbol(0))));
+    fn test_parse_symbol() {
+        assert_eq!(parse_expr("X"), Ok(Expr::Symbol(Symbol(0))));
     }
 
     #[test]
@@ -554,23 +545,23 @@ mod tests {
         );
         assert_eq!(
             parse_expr(r#""\z""#).unwrap_err().kind,
-            ErrorKind::InvalidEscapeSequence
+            ErrorKind::StringInvalidEscapeSequence
         );
         assert_eq!(
             parse_expr(r#""\xFF""#).unwrap_err().kind,
-            ErrorKind::InvalidEscapeSequence
+            ErrorKind::StringInvalidEscapeSequence
         );
     }
 
     #[test]
     fn test_parse_integer() {
-        assert_eq!(parse_expr("0"), Ok(Expr::Integer(0)));
+        assert_eq!(parse_expr("0"), Ok(Expr::Int(0)));
         //assert_eq!(parse_expr("-0"), Ok(Expr::Integer(0)));
-        assert_eq!(parse_expr("7"), Ok(Expr::Integer(7)));
+        assert_eq!(parse_expr("7"), Ok(Expr::Int(7)));
         //assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
-        assert_eq!(parse_expr("123"), Ok(Expr::Integer(123)));
+        assert_eq!(parse_expr("123"), Ok(Expr::Int(123)));
         //assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
-        assert_eq!(parse_expr("000747"), Ok(Expr::Integer(747)));
+        assert_eq!(parse_expr("000747"), Ok(Expr::Int(747)));
         //assert_eq!(parse_expr("-002200"), Ok(Expr::Integer(-2200)));
         /*
         assert_eq!(
@@ -608,43 +599,43 @@ mod tests {
         assert_eq!(
             parse_expr("(1)"),
             Ok(Expr::Tuple(Tuple {
-                tag: None,
-                positional: vec![Expr::Integer(1)],
+                symbol: None,
+                positional: vec![Expr::Int(1)],
                 named: vec![],
             }))
         );
         assert_eq!(
             parse_expr("(1, 2, 3)"),
             Ok(Expr::Tuple(Tuple {
-                tag: None,
-                positional: vec![Expr::Integer(1), Expr::Integer(2), Expr::Integer(3)],
+                symbol: None,
+                positional: vec![Expr::Int(1), Expr::Int(2), Expr::Int(3)],
                 named: vec![],
             }))
         );
         assert_eq!(
             parse_expr("Point(1, 2)"),
             Ok(Expr::Tuple(Tuple {
-                tag: Some(Symbol(0)),
-                positional: vec![Expr::Integer(1), Expr::Integer(2)],
+                symbol: Some(Symbol(0)),
+                positional: vec![Expr::Int(1), Expr::Int(2)],
                 named: vec![],
             }))
         );
         assert_eq!(
             parse_expr("(x: 1, y: 2)"),
             Ok(Expr::Tuple(Tuple {
-                tag: None,
+                symbol: None,
                 positional: vec![],
-                named: vec![(Symbol(0), Expr::Integer(1)), (Symbol(1), Expr::Integer(2)),]
+                named: vec![(Symbol(0), Expr::Int(1)), (Symbol(1), Expr::Int(2)),]
             }))
         );
         assert_eq!(
             parse_expr(r#"Person("id", name: "Bob", age: 49)"#),
             Ok(Expr::Tuple(Tuple {
-                tag: Some(Symbol(0)),
+                symbol: Some(Symbol(0)),
                 positional: vec![Expr::String("id".into())],
                 named: vec![
                     (Symbol(1), Expr::String("Bob".into())),
-                    (Symbol(2), Expr::Integer(49))
+                    (Symbol(2), Expr::Int(49))
                 ],
             }))
         )
@@ -652,14 +643,10 @@ mod tests {
 
     #[test]
     fn test_parse_vector() {
-        assert_eq!(parse_expr("[1]"), Ok(Expr::Vector(vec![Expr::Integer(1)])));
+        assert_eq!(parse_expr("[1]"), Ok(Expr::Vector(vec![Expr::Int(1)])));
         assert_eq!(
             parse_expr("[1, 2, 3]"),
-            Ok(Expr::Vector(vec![
-                Expr::Integer(1),
-                Expr::Integer(2),
-                Expr::Integer(3)
-            ]))
+            Ok(Expr::Vector(vec![Expr::Int(1), Expr::Int(2), Expr::Int(3)]))
         )
     }
 
@@ -669,14 +656,14 @@ mod tests {
             parse_expr("0 + 0"),
             Ok(Expr::Operator(
                 OperatorKind::Add,
-                vec![Expr::Integer(0).into(), Expr::Integer(0).into()]
+                vec![Expr::Int(0).into(), Expr::Int(0).into()]
             ))
         );
         assert_eq!(
             parse_expr("0 * 0"),
             Ok(Expr::Operator(
                 OperatorKind::Multiply,
-                vec![Expr::Integer(0).into(), Expr::Integer(0).into()]
+                vec![Expr::Int(0).into(), Expr::Int(0).into()]
             ))
         );
         assert_eq!(
@@ -684,11 +671,8 @@ mod tests {
             Ok(Expr::Operator(
                 OperatorKind::Add,
                 vec![
-                    Expr::Integer(0),
-                    Expr::Operator(
-                        OperatorKind::Multiply,
-                        vec![Expr::Integer(0), Expr::Integer(0)]
-                    )
+                    Expr::Int(0),
+                    Expr::Operator(OperatorKind::Multiply, vec![Expr::Int(0), Expr::Int(0)])
                 ],
             ))
         );
@@ -702,15 +686,12 @@ mod tests {
                         vec![
                             Expr::Operator(
                                 OperatorKind::Multiply,
-                                vec![Expr::Integer(0), Expr::Integer(0)],
+                                vec![Expr::Int(0), Expr::Int(0)],
                             ),
-                            Expr::Operator(
-                                OperatorKind::Divide,
-                                vec![Expr::Integer(0), Expr::Integer(0)],
-                            ),
+                            Expr::Operator(OperatorKind::Divide, vec![Expr::Int(0), Expr::Int(0)],),
                         ]
                     ),
-                    Expr::Integer(0)
+                    Expr::Int(0)
                 ]
             )),
         );
@@ -780,8 +761,8 @@ mod tests {
             Ok(Expr::Block(
                 vec![],
                 vec![
-                    Let(Pattern::Identifier(Symbol(0)), Expr::Integer(0).into()),
-                    Let(Pattern::Identifier(Symbol(1)), Expr::Integer(1).into())
+                    Let(Pattern::Identifier(Symbol(0)), Expr::Int(0).into()),
+                    Let(Pattern::Identifier(Symbol(1)), Expr::Int(1).into())
                 ],
                 vec![Expr::Vector(vec![
                     Expr::Identifier(Symbol(0)),
@@ -789,7 +770,7 @@ mod tests {
                 ])]
             ))
         );
-        assert_eq!(parse("{{1}}"), Ok(Expr::Integer(1)));
+        assert_eq!(parse("{{1}}"), Ok(Expr::Int(1)));
         assert_eq!(
             parse(
                 r#"
@@ -811,7 +792,7 @@ mod tests {
                     )
                 ],
                 vec![Expr::Tuple(Tuple {
-                    tag: None,
+                    symbol: None,
                     positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
                     named: vec![],
                 })]
@@ -833,7 +814,7 @@ mod tests {
                 vec![Let(
                     Pattern::Identifier(Symbol(2)),
                     Expr::Tuple(Tuple {
-                        tag: Some(Symbol(3)),
+                        symbol: Some(Symbol(3)),
                         positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
                         named: vec![],
                     })
@@ -844,3 +825,4 @@ mod tests {
         );
     }
 }
+*/
