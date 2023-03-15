@@ -6,10 +6,10 @@ let integer = 0
 # Float
 let float = 1.3
 
-# Tags
-let color = Red
-let type = Person
-let animal = Dog
+# Symbols
+let color = 'red'
+let type = 'person'
+let animal = 'dog'
 
 # Sets (sum types)
 
@@ -41,36 +41,16 @@ let two = (1, 2)
 let three = (1, 2, 3)
 let named = (age: 24, firstName: "Ethan")
 
-let x = (
-  let z = 10
-  let w = 20
-  let z = {}
-  let w = ()
-
-  let pattern = Regex {
-    (?P<year>\d{4})-
-    (?P<month>\d{2})-
-    (?P<day>\d{2})
-  }
-)
-/
-# Tagged tuples
-#
-# Tuples can be optionally prefixed with a "tag" starting with an
-# uppercase letter. This tag serves as a type indicator for the values
-# in the tuple and allows sum types among tuples to be easily defined.
-let result = Ok(1)
-let error = Error("Something went wrong!")
-
-# Taggled Tuples
-let option = Some(1)
-let result = Error("Unexpected character!")
-let good = Ok(None)
+let result = ('ok', 1)
+let error = ('error', "Something went wrong!")
+let option = ('some', 1)
+let result = ('error', "Unexpected character!")
+let good = ('ok', None)
 
 # Vectors
 let vec = [1, 2, 3]
 
 # Functions
-let f x = x + 10
-let g y z = y * 2 + z / 100
-let lambda = a b c -> a + b + c
+let f(x) = x + 10
+let g(y, z) = y * 2 + z / 100
+let lambda = (a, b, c) -> a + b + c

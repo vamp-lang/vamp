@@ -1,10 +1,12 @@
 use crate::symbol::Symbol;
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum PatternTupleMember<'ast> {
     Positional(Pattern<'ast>),
     Named(Symbol, Pattern<'ast>),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Pattern<'ast> {
     Nil,
     Tuple(&'ast [PatternTupleMember<'ast>]),
@@ -16,17 +18,20 @@ pub enum Pattern<'ast> {
     Float(f64),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum TupleMember<'ast> {
     Positional(Expr<'ast>),
     Named(Symbol, Expr<'ast>),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement<'ast> {
-    Use(Pattern<'ast>, &'ast Expr<'ast>),
-    Let(Pattern<'ast>, &'ast Expr<'ast>),
+    Use(Pattern<'ast>, Expr<'ast>),
+    Let(Pattern<'ast>, Expr<'ast>),
     Expr(Expr<'ast>),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum BuiltIn {
     Add,
     Sub,
@@ -37,6 +42,7 @@ pub enum BuiltIn {
     Index,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr<'ast> {
     Void,
     Nil,
@@ -55,10 +61,11 @@ pub enum Expr<'ast> {
     BuiltIn(BuiltIn),
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Import<'ast>(pub Pattern<'ast>, pub &'ast str);
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Module<'ast> {
     pub imports: &'ast [Import<'ast>],
     pub body: Expr<'ast>,
-    pub export: Expr<'ast>,
 }

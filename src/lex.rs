@@ -18,7 +18,7 @@ pub enum TokenKind {
     Minus,
     Times,
     Divide,
-    Arrow,
+    Pipe,
 
     // Keywords
     Import,
@@ -151,6 +151,8 @@ impl<'a> Tokens<'a> {
             self.ok(TokenKind::LBrace)
         } else if self.bump_if(|c| c == b'}') {
             self.ok(TokenKind::RBrace)
+        } else if self.bump_if(|c| c == b'|') {
+            self.ok(TokenKind::Pipe)
         } else if self.bump_if(|c| c == b',') {
             self.ok(TokenKind::Comma)
         } else if self.bump_if(|c| c == b':') {
@@ -160,11 +162,7 @@ impl<'a> Tokens<'a> {
         } else if self.bump_if(|c| c == b'+') {
             self.ok(TokenKind::Plus)
         } else if self.bump_if(|c| c == b'-') {
-            if self.bump_if(|c| c == b'>') {
-                self.ok(TokenKind::Arrow)
-            } else {
-                self.ok(TokenKind::Minus)
-            }
+            self.ok(TokenKind::Minus)
         } else if self.bump_if(|c| c == b'*') {
             self.ok(TokenKind::Times)
         } else if self.bump_if(|c| c == b'/') {
@@ -338,6 +336,7 @@ mod tests {
             (TokenKind::RBracket, "]"),
             (TokenKind::LBrace, "{"),
             (TokenKind::RBrace, "}"),
+            (TokenKind::Pipe, "|"),
             (TokenKind::Comma, ","),
             (TokenKind::Colon, ":"),
             (TokenKind::Equals, "="),
@@ -345,7 +344,6 @@ mod tests {
             (TokenKind::Minus, "-"),
             (TokenKind::Times, "*"),
             (TokenKind::Divide, "/"),
-            (TokenKind::Arrow, "->"),
             // Keywords
             (TokenKind::Import, "import"),
             (TokenKind::Export, "export"),

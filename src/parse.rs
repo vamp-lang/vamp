@@ -28,7 +28,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn accept_slice(&mut self, kind: TokenKind) -> Option<&str> {
+    fn accept_slice(&mut self, kind: TokenKind) -> Option<&'src str> {
         self.accept(kind).map(|span| &self.source[span])
     }
 
@@ -68,77 +68,88 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         self.accept_symbol(TokenKind::Identifier)
     }
 
-    fn symbol(&mut self) -> Option<Symbol> {
-        self.accept_symbol(TokenKind::Symbol)
+    fn unescape(&mut self, span: Span) -> Result<&'ast str> {
+        let slice = &self.source[span];
+        let mut string = BumpString::with_capacity_in(slice.len(), self.arena);
+        let mut chars = slice[1..slice.len() - 1].chars();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                let error = Error {
+                    kind: ErrorKind::StringInvalidEscapeSequence,
+                    span,
+                };
+                // `unwrap()` here is safe because a string ending `\` such
+                // as `"\"` would fail with `UnterminatedString`.
+                let c = chars.next().unwrap();
+                match c {
+                    '\\' => string.push('\\'),
+                    '"' => string.push('"'),
+                    '\'' => string.push('\''),
+                    // Bell
+                    'a' => string.push('\x07'),
+                    // Backspace
+                    'b' => string.push('\x08'),
+                    // Horizontal tab
+                    't' => string.push('\t'),
+                    // Vertical tab
+                    'v' => string.push('\x0B'),
+                    // Form feed
+                    'f' => string.push('\x0C'),
+                    // Newline
+                    'n' => {
+                        string.push('\n');
+                    }
+                    // Carriage return
+                    'r' => {
+                        string.push('\r');
+                    }
+                    // Nul
+                    '0' => {
+                        string.push('\0');
+                    }
+                    // Hexidecimal
+                    'x' => {
+                        let a = chars.next().ok_or(error)?;
+                        let b = chars.next().ok_or(error)?;
+                        let value =
+                            16 * match a {
+                                '0'..='9' => a as u8 - b'0',
+                                'a'..='f' => 10 + a as u8 - b'a',
+                                'A'..='F' => 10 + a as u8 - b'A',
+                                _ => return Err(error),
+                            } + match b {
+                                '0'..='9' => b as u8 - b'0',
+                                'a'..='f' => 10 + b as u8 - b'a',
+                                'A'..='F' => 10 + b as u8 - b'A',
+                                _ => return Err(error),
+                            };
+                        if value > 127 {
+                            return Err(error);
+                        }
+                        string.push(value as char);
+                    }
+                    _ => return Err(error),
+                }
+            } else {
+                string.push(c)
+            }
+        }
+        Ok(string.into_bump_str())
     }
 
-    fn string(&mut self) -> Result<Option<&str>> {
+    fn symbol(&mut self) -> Result<Option<Symbol>> {
+        if let Some(span) = self.accept(TokenKind::Symbol) {
+            let unescaped = self.unescape(span)?;
+            Ok(Some(self.interner.intern(unescaped)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn string(&mut self) -> Result<Option<&'ast str>> {
         if let Some(span) = self.accept(TokenKind::String) {
-            let slice = &self.source[span];
-            let mut string = BumpString::with_capacity_in(slice.len(), self.arena);
-            let mut chars = slice[1..slice.len() - 1].chars();
-            while let Some(c) = chars.next() {
-                if c == '\\' {
-                    let error = Error {
-                        kind: ErrorKind::StringInvalidEscapeSequence,
-                        span,
-                    };
-                    // `unwrap()` here is safe because a string ending `\` such
-                    // as `"\"` would fail with `UnterminatedString`.
-                    let c = chars.next().unwrap();
-                    match c {
-                        '\\' => string.push('\\'),
-                        '"' => string.push('"'),
-                        // Bell
-                        'a' => string.push('\x07'),
-                        // Backspace
-                        'b' => string.push('\x08'),
-                        // Horizontal tab
-                        't' => string.push('\t'),
-                        // Vertical tab
-                        'v' => string.push('\x0B'),
-                        // Form feed
-                        'f' => string.push('\x0C'),
-                        // Newline
-                        'n' => {
-                            string.push('\n');
-                        }
-                        // Carriage return
-                        'r' => {
-                            string.push('\r');
-                        }
-                        // Nul
-                        '0' => {
-                            string.push('\0');
-                        }
-                        // Hexidecimal
-                        'x' => {
-                            let a = chars.next().ok_or(error)?;
-                            let b = chars.next().ok_or(error)?;
-                            let value =
-                                16 * match a {
-                                    '0'..='9' => a as u8 - b'0',
-                                    'a'..='f' => 10 + a as u8 - b'a',
-                                    'A'..='F' => 10 + a as u8 - b'A',
-                                    _ => return Err(error),
-                                } + match b {
-                                    '0'..='9' => b as u8 - b'0',
-                                    'a'..='f' => 10 + b as u8 - b'a',
-                                    'A'..='F' => 10 + b as u8 - b'A',
-                                    _ => return Err(error),
-                                };
-                            if value > 127 {
-                                return Err(error);
-                            }
-                            string.push(value as char);
-                        }
-                        _ => return Err(error),
-                    }
-                } else {
-                    string.push(c)
-                }
-            }
-            Ok(Some(&string))
+            let unescaped = self.unescape(span)?;
+            Ok(Some(unescaped))
         } else {
             Ok(None)
         }
@@ -177,7 +188,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn tuple_member(&mut self) -> Result<Option<TupleMember>> {
+    fn tuple_member(&mut self) -> Result<Option<TupleMember<'ast>>> {
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
                 let expr = self.expr()?.unwrap_or_else(|| Expr::Identifier(identifier));
@@ -192,30 +203,30 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn tuple(&mut self) -> Result<Option<&[TupleMember]>> {
+    fn tuple(&mut self) -> Result<Option<&'ast [TupleMember<'ast>]>> {
         let i = self.index;
         if let Some(left_parenthesis_span) = self.accept(TokenKind::LParen) {
             let mut members = BumpVec::new_in(self.arena);
             if let Some(member) = self.tuple_member()? {
                 members.push(member);
-                while let Some(comma_span) = self.accept(TokenKind::Comma) {
+                while let Some(_comma_span) = self.accept(TokenKind::Comma) {
                     if let Some(member) = self.tuple_member()? {
                         members.push(member);
                     }
                 }
             }
-            self.accept(TokenKind::RParen).ok_or(Error {
+            self.accept(TokenKind::RParen).ok_or_else(|| Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
-            Ok(Some(&members))
+            Ok(Some(members.into_bump_slice()))
         } else {
             self.index = i;
             Ok(None)
         }
     }
 
-    fn vector(&mut self) -> Result<Option<&[Expr]>> {
+    fn vector(&mut self) -> Result<Option<&'ast [Expr<'ast>]>> {
         if let Some(left_bracket_span) = self.accept(TokenKind::LBracket) {
             let mut exprs = BumpVec::new_in(self.arena);
             if let Some(expr) = self.expr()? {
@@ -226,18 +237,18 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
                     }
                 }
             }
-            self.accept(TokenKind::RBracket).ok_or(Error {
+            self.accept(TokenKind::RBracket).ok_or_else(|| Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_bracket_span,
             })?;
-            Ok(Some(&exprs))
+            Ok(Some(exprs.into_bump_slice()))
         } else {
             Ok(None)
         }
     }
 
-    fn import(&mut self) -> Result<Option<Import>> {
-        if let Some(pattern) = self.pattern()? {
+    fn import(&mut self) -> Result<Option<Import<'ast>>> {
+        if let Some(pattern) = self.pattern() {
             if let Some(string) = self.string()? {
                 return Ok(Some(Import(pattern, string)));
             }
@@ -245,9 +256,9 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         Ok(None)
     }
 
-    fn imports(&mut self) -> Result<&[Import]> {
+    fn imports(&mut self) -> Result<&'ast [Import<'ast>]> {
         let mut imports = BumpVec::new_in(self.arena);
-        if let Some(import_span) = self.accept(TokenKind::Import) {
+        if let Some(_import_span) = self.accept(TokenKind::Import) {
             let left_parenthesis_span = self
                 .accept(TokenKind::LParen)
                 .ok_or_else(|| self.invalid_token())?;
@@ -259,87 +270,81 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
                     }
                 }
             }
-            self.accept(TokenKind::RParen).ok_or(Error {
+            self.accept(TokenKind::RParen).ok_or_else(|| Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_parenthesis_span,
             })?;
         }
-        Ok(&imports)
+        Ok(imports.into_bump_slice())
     }
 
-    fn pattern_tuple_member(&mut self) -> Result<Option<PatternTupleMember>> {
+    fn pattern_tuple_member(&mut self) -> Option<PatternTupleMember<'ast>> {
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
                 let pattern = self
-                    .pattern()?
+                    .pattern()
                     .unwrap_or_else(|| Pattern::Identifier(identifier));
-                Ok(Some(PatternTupleMember::Named(identifier, pattern)))
+                Some(PatternTupleMember::Named(identifier, pattern))
             } else {
-                Ok(Some(PatternTupleMember::Positional(Pattern::Identifier(
+                Some(PatternTupleMember::Positional(Pattern::Identifier(
                     identifier,
-                ))))
+                )))
             }
-        } else if let Some(pattern) = self.pattern()? {
-            Ok(Some(PatternTupleMember::Positional(pattern)))
+        } else if let Some(pattern) = self.pattern() {
+            Some(PatternTupleMember::Positional(pattern))
         } else {
-            Ok(None)
+            None
         }
     }
 
-    fn pattern_tuple(&mut self) -> Result<Option<&[PatternTupleMember]>> {
+    fn pattern_tuple(&mut self) -> Option<&'ast [PatternTupleMember<'ast>]> {
         let i = self.index;
         if let Some(left_parenthesis_span) = self.accept(TokenKind::LParen) {
             let mut members = BumpVec::new_in(self.arena);
-            if let Some(member) = self.pattern_tuple_member()? {
+            if let Some(member) = self.pattern_tuple_member() {
                 members.push(member);
-                while let Some(comma_span) = self.accept(TokenKind::Comma) {
-                    if let Some(member) = self.pattern_tuple_member()? {
+                while let Some(_comma_span) = self.accept(TokenKind::Comma) {
+                    if let Some(member) = self.pattern_tuple_member() {
                         members.push(member);
                     }
                 }
             }
-            self.accept(TokenKind::RParen).ok_or(Error {
-                kind: ErrorKind::UnbalancedDelimiters,
-                span: left_parenthesis_span,
-            })?;
-            Ok(Some(&members))
+            self.accept(TokenKind::RParen)?;
+            Some(members.into_bump_slice())
         } else {
             self.index = i;
-            Ok(None)
+            None
         }
     }
 
-    fn pattern(&mut self) -> Result<Option<Pattern>> {
-        if let Some(members) = self.pattern_tuple()? {
+    fn pattern(&mut self) -> Option<Pattern<'ast>> {
+        if let Some(members) = self.pattern_tuple() {
             if members.len() == 0 {
-                Ok(Some(Pattern::Nil))
+                Some(Pattern::Nil)
             } else {
-                Ok(Some(Pattern::Tuple(members)))
+                Some(Pattern::Tuple(members))
             }
         } else if let Some(identifier) = self.identifier() {
-            Ok(Some(Pattern::Identifier(identifier)))
+            Some(Pattern::Identifier(identifier))
         } else {
-            Ok(None)
+            None
         }
     }
 
-    fn statement(&mut self) -> Result<Option<Statement>> {
+    fn statement(&mut self) -> Result<Option<Statement<'ast>>> {
         if self.accept(TokenKind::Let).is_some() {
-            let pattern = self.pattern()?.ok_or_else(|| self.invalid_token())?;
-            let args = self.pattern_tuple()?;
+            let pattern = self.pattern().ok_or_else(|| self.invalid_token())?;
+            let args = self.pattern_tuple();
             self.accept(TokenKind::Equals)
                 .ok_or_else(|| self.invalid_token())?;
             let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
             if let Some(args) = args {
                 Ok(Some(Statement::Let(
                     pattern,
-                    self.arena.alloc(Expr::Function(
-                        self.arena.alloc(args),
-                        self.arena.alloc(expr),
-                    )),
+                    Expr::Function(self.arena.alloc(args), self.arena.alloc(expr)),
                 )))
             } else {
-                Ok(Some(Statement::Let(pattern, self.arena.alloc(expr))))
+                Ok(Some(Statement::Let(pattern, expr)))
             }
         } else if let Some(expr) = self.expr()? {
             Ok(Some(Statement::Expr(expr)))
@@ -348,7 +353,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn statements(&mut self) -> Result<&[Statement]> {
+    fn statements(&mut self) -> Result<&'ast [Statement<'ast>]> {
         let mut statements = BumpVec::new_in(self.arena);
         if let Some(statement) = self.statement()? {
             statements.push(statement);
@@ -358,23 +363,29 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
                 }
             }
         }
-        Ok(&statements)
+        Ok(statements.into_bump_slice())
     }
 
-    fn block(&mut self) -> Result<Option<Expr>> {
+    fn block(&mut self) -> Result<Option<Expr<'ast>>> {
         if let Some(left_brace_span) = self.accept(TokenKind::LBrace) {
             let statements = self.statements()?;
-            self.accept(TokenKind::RBrace).ok_or(Error {
+            self.accept(TokenKind::RBrace).ok_or_else(|| Error {
                 kind: ErrorKind::UnbalancedDelimiters,
                 span: left_brace_span,
             })?;
-            Ok(Some(Expr::Block(&statements)))
+            if statements.len() == 0 {
+                Ok(Some(Expr::Void))
+            } else if let [Statement::Expr(expr)] = statements {
+                Ok(Some(expr.clone()))
+            } else {
+                Ok(Some(Expr::Block(&statements)))
+            }
         } else {
             Ok(None)
         }
     }
 
-    fn atom(&mut self) -> Result<Option<Expr>> {
+    fn atom(&mut self) -> Result<Option<Expr<'ast>>> {
         if let Some(members) = self.tuple()? {
             if members.len() == 0 {
                 Ok(Some(Expr::Nil))
@@ -387,7 +398,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
             Ok(Some(block))
         } else if let Some(identifier) = self.identifier() {
             Ok(Some(Expr::Identifier(identifier)))
-        } else if let Some(symbol) = self.symbol() {
+        } else if let Some(symbol) = self.symbol()? {
             Ok(Some(Expr::Symbol(symbol)))
         } else if let Some(string) = self.string()? {
             Ok(Some(Expr::String(string)))
@@ -400,22 +411,35 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn function(&mut self) -> Result<Option<Expr>> {
-        let i = self.index;
-        if let Some(args) = self.pattern_tuple()? {
-            if self.accept(TokenKind::Arrow).is_some() {
-                if let Some(expr) = self.expr()? {
-                    return Ok(Some(Expr::Function(args, self.arena.alloc(expr))));
-                } else {
-                    return Err(self.invalid_token());
+    fn function_args(&mut self) -> Result<Option<&'ast [PatternTupleMember<'ast>]>> {
+        if self.accept(TokenKind::Pipe).is_some() {
+            let mut args = BumpVec::new_in(self.arena);
+            if let Some(arg) = self.pattern_tuple_member() {
+                args.push(arg);
+                while self.accept(TokenKind::Comma).is_some() {
+                    if let Some(arg) = self.pattern_tuple_member() {
+                        args.push(arg);
+                    }
                 }
             }
+            self.accept(TokenKind::Pipe)
+                .ok_or_else(|| self.invalid_token())?;
+            Ok(Some(args.into_bump_slice()))
+        } else {
+            Ok(None)
         }
-        self.index = i;
-        Ok(None)
     }
 
-    fn expr_with_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
+    fn function(&mut self) -> Result<Option<Expr<'ast>>> {
+        if let Some(args) = self.function_args()? {
+            let expr = self.expr()?.unwrap_or(Expr::Void);
+            Ok(Some(Expr::Function(args, self.arena.alloc(expr))))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn expr_with_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr<'ast>>> {
         if let Some(mut left) = self.atom()? {
             if let Some(members) = self.tuple()? {
                 left = Expr::Call(self.arena.alloc(left), members);
@@ -433,7 +457,10 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
                             TupleMember::Positional(left),
                             TupleMember::Positional(right),
                         ];
-                        left = Expr::Call(self.arena.alloc(Expr::BuiltIn(built_in)), &args);
+                        left = Expr::Call(
+                            self.arena.alloc(Expr::BuiltIn(built_in)),
+                            args.into_bump_slice(),
+                        );
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -447,7 +474,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn expr(&mut self) -> Result<Option<Expr>> {
+    fn expr(&mut self) -> Result<Option<Expr<'ast>>> {
         if let Some(function) = self.function()? {
             Ok(Some(function))
         } else if let Some(expr) = self.expr_with_precedence(0)? {
@@ -457,7 +484,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         }
     }
 
-    fn module(&mut self) -> Result<Module> {
+    fn module(&mut self) -> Result<Module<'ast>> {
         let imports = self.imports()?;
         if imports.len() > 0 {
             self.accept(TokenKind::Comma);
@@ -466,15 +493,14 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
         Ok(Module {
             imports,
             body: Expr::Block(statements),
-            export: Expr::Void,
         })
     }
 }
 
-pub fn parse_module<'src, 'ast, 'sym>(
-    source: &'src str,
+pub fn parse_module<'ast>(
+    source: &str,
     arena: &'ast Bump,
-    interner: &'sym mut Interner,
+    interner: &mut Interner,
 ) -> Result<Module<'ast>> {
     Parser {
         source,
@@ -486,10 +512,27 @@ pub fn parse_module<'src, 'ast, 'sym>(
     .module()
 }
 
-pub fn parse_expr<'src, 'ast, 'sym>(
-    source: &'src str,
+pub fn parse_statement<'ast>(
+    source: &str,
     arena: &'ast Bump,
-    interner: &'sym mut Interner,
+    interner: &mut Interner,
+) -> Result<Statement<'ast>> {
+    let expr = Parser {
+        source,
+        arena,
+        interner,
+        tokens: tokenize(source)?,
+        index: 0,
+    }
+    .statement()?
+    .unwrap_or(Statement::Expr(Expr::Void));
+    Ok(expr)
+}
+
+pub fn parse_expr<'ast>(
+    source: &str,
+    arena: &'ast Bump,
+    interner: &mut Interner,
 ) -> Result<Expr<'ast>> {
     let expr = Parser {
         source,
@@ -503,65 +546,68 @@ pub fn parse_expr<'src, 'ast, 'sym>(
     Ok(expr)
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn parse(source: &str) -> Result<Expr> {
-        let bump = Bump::new();
+    fn parse_module<'ast>(source: &str, arena: &'ast Bump) -> Result<Module<'ast>> {
         let mut interner: Interner = Interner::new();
-        super::parse(source, &bump, &mut interner)
+        super::parse_module(source, arena, &mut interner)
     }
 
-    fn parse_expr(source: &str) -> Result<Expr> {
-        let bump = Bump::new();
+    fn parse_expr<'ast>(source: &str, arena: &'ast Bump) -> Result<Expr<'ast>> {
         let mut interner: Interner = Interner::new();
-        super::parse_expr(source, &bump, &mut interner)
+        super::parse_expr(source, arena, &mut interner)
     }
 
     #[test]
-    fn test_parse_identifier() {
-        assert_eq!(parse_expr("x"), Ok(Expr::Identifier(Symbol(0))));
+    fn identifier() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("x", &a), Ok(Expr::Identifier(Symbol(0))));
     }
 
     #[test]
-    fn test_parse_symbol() {
-        assert_eq!(parse_expr("X"), Ok(Expr::Symbol(Symbol(0))));
+    fn symbol() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("''", &a), Ok(Expr::Symbol(Symbol(0))));
+        assert_eq!(parse_expr("'\\''", &a), Ok(Expr::Symbol(Symbol(0))));
+        assert_eq!(parse_expr("'x'", &a), Ok(Expr::Symbol(Symbol(0))));
     }
 
     #[test]
-    fn test_parse_string() {
-        assert_eq!(parse_expr(r#""""#), Ok(Expr::String("".into())));
-        assert_eq!(parse_expr(r#""\"""#), Ok(Expr::String("\"".into())));
-        assert_eq!(parse_expr(r#""\\""#), Ok(Expr::String("\\".into())));
+    fn string() {
+        let a = Bump::new();
+        assert_eq!(parse_expr(r#""""#, &a), Ok(Expr::String("")));
+        assert_eq!(parse_expr(r#""\"""#, &a), Ok(Expr::String("\"")));
+        assert_eq!(parse_expr(r#""\\""#, &a), Ok(Expr::String("\\")));
         assert_eq!(
-            parse_expr(r#""\0\a\b\t\v\f\n\r""#),
-            Ok(Expr::String("\0\x07\x08\t\x0B\x0C\n\r".into()))
+            parse_expr(r#""\0\a\b\t\v\f\n\r""#, &a),
+            Ok(Expr::String("\0\x07\x08\t\x0B\x0C\n\r"))
         );
         assert_eq!(
-            parse_expr(r#""\x00\x01\x02\x03\x04\x05""#),
-            Ok(Expr::String("\x00\x01\x02\x03\x04\x05".into()))
+            parse_expr(r#""\x00\x01\x02\x03\x04\x05""#, &a),
+            Ok(Expr::String("\x00\x01\x02\x03\x04\x05"))
         );
         assert_eq!(
-            parse_expr(r#""\z""#).unwrap_err().kind,
+            parse_expr(r#""\z""#, &a).unwrap_err().kind,
             ErrorKind::StringInvalidEscapeSequence
         );
         assert_eq!(
-            parse_expr(r#""\xFF""#).unwrap_err().kind,
+            parse_expr(r#""\xFF""#, &a).unwrap_err().kind,
             ErrorKind::StringInvalidEscapeSequence
         );
     }
 
     #[test]
-    fn test_parse_integer() {
-        assert_eq!(parse_expr("0"), Ok(Expr::Int(0)));
+    fn integer() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("0", &a), Ok(Expr::Int(0)));
         //assert_eq!(parse_expr("-0"), Ok(Expr::Integer(0)));
-        assert_eq!(parse_expr("7"), Ok(Expr::Int(7)));
+        assert_eq!(parse_expr("7", &a), Ok(Expr::Int(7)));
         //assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
-        assert_eq!(parse_expr("123"), Ok(Expr::Int(123)));
+        assert_eq!(parse_expr("123", &a), Ok(Expr::Int(123)));
         //assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
-        assert_eq!(parse_expr("000747"), Ok(Expr::Int(747)));
+        assert_eq!(parse_expr("000747", &a), Ok(Expr::Int(747)));
         //assert_eq!(parse_expr("-002200"), Ok(Expr::Integer(-2200)));
         /*
         assert_eq!(
@@ -584,245 +630,253 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_float() {
-        assert_eq!(parse_expr("0.0"), Ok(Expr::Float(0.0)));
+    fn float() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("0.0", &a), Ok(Expr::Float(0.0)));
         //assert_eq!(parse_expr("-0.0"), Ok(Expr::Float(0.0)));
-        assert_eq!(parse_expr("1.0"), Ok(Expr::Float(1.0)));
+        assert_eq!(parse_expr("1.0", &a), Ok(Expr::Float(1.0)));
         //assert_eq!(parse_expr("-1.0"), Ok(Expr::Float(-1.0)));
-        assert_eq!(parse_expr("3.141592"), Ok(Expr::Float(3.141592)));
+        assert_eq!(parse_expr("3.141592", &a), Ok(Expr::Float(3.141592)));
         //assert_eq!(parse_expr("-2.7800000"), Ok(Expr::Float(-2.78)));
     }
 
     #[test]
-    fn test_parse_tuple() {
-        assert_eq!(parse_expr("()"), Ok(Expr::Nil),);
+    fn tuple() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("()", &a), Ok(Expr::Nil));
         assert_eq!(
-            parse_expr("(1)"),
-            Ok(Expr::Tuple(Tuple {
-                symbol: None,
-                positional: vec![Expr::Int(1)],
-                named: vec![],
-            }))
+            parse_expr("(1)", &a),
+            Ok(Expr::Tuple(&[TupleMember::Positional(Expr::Int(1))]))
         );
         assert_eq!(
-            parse_expr("(1, 2, 3)"),
-            Ok(Expr::Tuple(Tuple {
-                symbol: None,
-                positional: vec![Expr::Int(1), Expr::Int(2), Expr::Int(3)],
-                named: vec![],
-            }))
+            parse_expr("(1, 2, 3)", &a),
+            Ok(Expr::Tuple(&[
+                TupleMember::Positional(Expr::Int(1)),
+                TupleMember::Positional(Expr::Int(2)),
+                TupleMember::Positional(Expr::Int(3)),
+            ]))
         );
         assert_eq!(
-            parse_expr("Point(1, 2)"),
-            Ok(Expr::Tuple(Tuple {
-                symbol: Some(Symbol(0)),
-                positional: vec![Expr::Int(1), Expr::Int(2)],
-                named: vec![],
-            }))
+            parse_expr("(x: 1, y: 2)", &a),
+            Ok(Expr::Tuple(&[
+                TupleMember::Named(Symbol(0), Expr::Int(1)),
+                TupleMember::Named(Symbol(1), Expr::Int(2))
+            ]))
         );
         assert_eq!(
-            parse_expr("(x: 1, y: 2)"),
-            Ok(Expr::Tuple(Tuple {
-                symbol: None,
-                positional: vec![],
-                named: vec![(Symbol(0), Expr::Int(1)), (Symbol(1), Expr::Int(2)),]
-            }))
+            parse_expr(r#"("id", name: "Bob", age: 49)"#, &a),
+            Ok(Expr::Tuple(&[
+                TupleMember::Positional(Expr::String("id")),
+                TupleMember::Named(Symbol(0), Expr::String("Bob")),
+                TupleMember::Named(Symbol(1), Expr::Int(49))
+            ]))
         );
+    }
+
+    #[test]
+    fn vector() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("[1]", &a), Ok(Expr::Vector(&[Expr::Int(1)])));
         assert_eq!(
-            parse_expr(r#"Person("id", name: "Bob", age: 49)"#),
-            Ok(Expr::Tuple(Tuple {
-                symbol: Some(Symbol(0)),
-                positional: vec![Expr::String("id".into())],
-                named: vec![
-                    (Symbol(1), Expr::String("Bob".into())),
-                    (Symbol(2), Expr::Int(49))
-                ],
-            }))
+            parse_expr("[1, 2, 3]", &a),
+            Ok(Expr::Vector(&[Expr::Int(1), Expr::Int(2), Expr::Int(3)]))
         )
     }
 
     #[test]
-    fn test_parse_vector() {
-        assert_eq!(parse_expr("[1]"), Ok(Expr::Vector(vec![Expr::Int(1)])));
+    fn expr_precedence() {
+        let a = Bump::new();
         assert_eq!(
-            parse_expr("[1, 2, 3]"),
-            Ok(Expr::Vector(vec![Expr::Int(1), Expr::Int(2), Expr::Int(3)]))
-        )
-    }
-
-    #[test]
-    fn test_precedence() {
-        assert_eq!(
-            parse_expr("0 + 0"),
-            Ok(Expr::Operator(
-                OperatorKind::Add,
-                vec![Expr::Int(0).into(), Expr::Int(0).into()]
+            parse_expr("0 + 0", &a),
+            Ok(Expr::Call(
+                &Expr::BuiltIn(BuiltIn::Add),
+                &[
+                    TupleMember::Positional(Expr::Int(0)),
+                    TupleMember::Positional(Expr::Int(0))
+                ]
             ))
         );
         assert_eq!(
-            parse_expr("0 * 0"),
-            Ok(Expr::Operator(
-                OperatorKind::Multiply,
-                vec![Expr::Int(0).into(), Expr::Int(0).into()]
+            parse_expr("0 * 0", &a),
+            Ok(Expr::Call(
+                &Expr::BuiltIn(BuiltIn::Mul),
+                &[
+                    TupleMember::Positional(Expr::Int(0)),
+                    TupleMember::Positional(Expr::Int(0))
+                ]
             ))
         );
         assert_eq!(
-            parse_expr("0 + 0 * 0"),
-            Ok(Expr::Operator(
-                OperatorKind::Add,
-                vec![
-                    Expr::Int(0),
-                    Expr::Operator(OperatorKind::Multiply, vec![Expr::Int(0), Expr::Int(0)])
+            parse_expr("0 + 0 * 0", &a),
+            Ok(Expr::Call(
+                &Expr::BuiltIn(BuiltIn::Add),
+                &[
+                    TupleMember::Positional(Expr::Int(0)),
+                    TupleMember::Positional(Expr::Call(
+                        &Expr::BuiltIn(BuiltIn::Mul),
+                        &[
+                            TupleMember::Positional(Expr::Int(0)),
+                            TupleMember::Positional(Expr::Int(0))
+                        ],
+                    )),
                 ],
             ))
         );
         assert_eq!(
-            parse_expr("0 * 0 + 0 / 0 - 0"),
-            Ok(Expr::Operator(
-                OperatorKind::Subtract,
-                vec![
-                    Expr::Operator(
-                        OperatorKind::Add,
-                        vec![
-                            Expr::Operator(
-                                OperatorKind::Multiply,
-                                vec![Expr::Int(0), Expr::Int(0)],
-                            ),
-                            Expr::Operator(OperatorKind::Divide, vec![Expr::Int(0), Expr::Int(0)],),
+            parse_expr("0 * 0 + 0 / 0 - 0", &a),
+            Ok(Expr::Call(
+                &Expr::BuiltIn(BuiltIn::Sub),
+                &[
+                    TupleMember::Positional(Expr::Call(
+                        &Expr::BuiltIn(BuiltIn::Add),
+                        &[
+                            TupleMember::Positional(Expr::Call(
+                                &Expr::BuiltIn(BuiltIn::Mul),
+                                &[
+                                    TupleMember::Positional(Expr::Int(0)),
+                                    TupleMember::Positional(Expr::Int(0))
+                                ]
+                            )),
+                            TupleMember::Positional(Expr::Call(
+                                &Expr::BuiltIn(BuiltIn::Div),
+                                &[
+                                    TupleMember::Positional(Expr::Int(0)),
+                                    TupleMember::Positional(Expr::Int(0))
+                                ]
+                            ))
                         ]
-                    ),
-                    Expr::Int(0)
+                    )),
+                    TupleMember::Positional(Expr::Int(0))
                 ]
             )),
         );
         assert_eq!(
-            parse_expr("f x * g y + h z"),
-            Ok(Expr::Operator(
-                OperatorKind::Add,
-                vec![
-                    Expr::Operator(
-                        OperatorKind::Multiply,
-                        vec![
-                            Expr::Call(
-                                Expr::Identifier(Symbol(0)).into(),
-                                vec![Expr::Identifier(Symbol(1)).into()]
-                            ),
-                            Expr::Call(
-                                Expr::Identifier(Symbol(2)).into(),
-                                vec![Expr::Identifier(Symbol(3)).into()]
-                            ),
+            parse_expr("f(x) * g(y) + h(z)", &a),
+            Ok(Expr::Call(
+                &Expr::BuiltIn(BuiltIn::Add),
+                &[
+                    TupleMember::Positional(Expr::Call(
+                        &Expr::BuiltIn(BuiltIn::Mul),
+                        &[
+                            TupleMember::Positional(Expr::Call(
+                                &Expr::Identifier(Symbol(0)),
+                                &[TupleMember::Positional(Expr::Identifier(Symbol(1)))]
+                            )),
+                            TupleMember::Positional(Expr::Call(
+                                &Expr::Identifier(Symbol(2)),
+                                &[TupleMember::Positional(Expr::Identifier(Symbol(3)))]
+                            )),
                         ]
-                    ),
-                    Expr::Call(
-                        Expr::Identifier(Symbol(4)).into(),
-                        vec![Expr::Identifier(Symbol(5))]
-                    ),
+                    )),
+                    TupleMember::Positional(Expr::Call(
+                        &Expr::Identifier(Symbol(4)),
+                        &[TupleMember::Positional(Expr::Identifier(Symbol(5)))]
+                    )),
                 ]
             )),
         );
     }
 
     #[test]
-    fn test_function() {
+    fn function() {
+        let a = Bump::new();
         assert_eq!(
-            parse_expr("x -> x"),
+            parse_expr("|x| x", &a),
             Ok(Expr::Function(
-                vec![Pattern::Identifier(Symbol(0))],
-                Expr::Identifier(Symbol(0)).into()
+                &[PatternTupleMember::Positional(Pattern::Identifier(Symbol(
+                    0
+                )))],
+                &Expr::Identifier(Symbol(0))
             ))
         );
         assert_eq!(
-            parse_expr("x y z -> x y z"),
+            parse_expr("|x, y, z| x(y, z)", &a),
             Ok(Expr::Function(
-                vec![
-                    Pattern::Identifier(Symbol(0)),
-                    Pattern::Identifier(Symbol(1)),
-                    Pattern::Identifier(Symbol(2)),
+                &[
+                    PatternTupleMember::Positional(Pattern::Identifier(Symbol(0))),
+                    PatternTupleMember::Positional(Pattern::Identifier(Symbol(1))),
+                    PatternTupleMember::Positional(Pattern::Identifier(Symbol(2))),
                 ],
-                Expr::Call(
-                    Expr::Identifier(Symbol(0)).into(),
-                    vec![
-                        Expr::Identifier(Symbol(1)).into(),
-                        Expr::Identifier(Symbol(2)).into(),
+                &Expr::Call(
+                    &Expr::Identifier(Symbol(0)),
+                    &[
+                        TupleMember::Positional(Expr::Identifier(Symbol(1))),
+                        TupleMember::Positional(Expr::Identifier(Symbol(2)))
                     ]
                 )
-                .into()
             ))
         )
     }
 
     #[test]
-    fn test_parse_block() {
-        assert_eq!(parse_expr("{}"), Ok(Expr::Void));
-        assert_eq!(parse_expr("{{{{{}}}}}"), Ok(Expr::Void));
-        assert_eq!(parse(""), Ok(Expr::Void));
+    fn block() {
+        let a = Bump::new();
+        assert_eq!(parse_expr("{}", &a), Ok(Expr::Void));
+        assert_eq!(parse_expr("{{{{{}}}}}", &a), Ok(Expr::Void));
         assert_eq!(
-            parse("let x = 0, let y = 1, [x, y]"),
-            Ok(Expr::Block(
-                vec![],
-                vec![
-                    Let(Pattern::Identifier(Symbol(0)), Expr::Int(0).into()),
-                    Let(Pattern::Identifier(Symbol(1)), Expr::Int(1).into())
-                ],
-                vec![Expr::Vector(vec![
-                    Expr::Identifier(Symbol(0)),
-                    Expr::Identifier(Symbol(1))
-                ])]
-            ))
+            parse_module("let x = 0, let y = 1, [x, y]", &a),
+            Ok(Module {
+                imports: &[],
+                body: Expr::Block(&[
+                    Statement::Let(Pattern::Identifier(Symbol(0)), Expr::Int(0)),
+                    Statement::Let(Pattern::Identifier(Symbol(1)), Expr::Int(1)),
+                    Statement::Expr(Expr::Vector(&[
+                        Expr::Identifier(Symbol(0)),
+                        Expr::Identifier(Symbol(1))
+                    ])),
+                ]),
+            })
         );
-        assert_eq!(parse("{{1}}"), Ok(Expr::Int(1)));
+        assert_eq!(parse_expr("{{1}}", &a), Ok(Expr::Int(1)));
         assert_eq!(
-            parse(
+            parse_module(
                 r#"
                 let a = "test"
                 let b = "test"
                 (a, b)
-                "#
+                "#,
+                &a
             ),
-            Ok(Expr::Block(
-                vec![],
-                vec![
-                    Let(
-                        Pattern::Identifier(Symbol(0)),
-                        Expr::String("test".into()).into()
-                    ),
-                    Let(
-                        Pattern::Identifier(Symbol(1)),
-                        Expr::String("test".into()).into(),
-                    )
-                ],
-                vec![Expr::Tuple(Tuple {
-                    symbol: None,
-                    positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
-                    named: vec![],
-                })]
-            ))
+            Ok(Module {
+                imports: &[],
+                body: Expr::Block(&[
+                    Statement::Let(Pattern::Identifier(Symbol(0)), Expr::String("test")),
+                    Statement::Let(Pattern::Identifier(Symbol(1)), Expr::String("test")),
+                    Statement::Expr(Expr::Tuple(&[
+                        TupleMember::Positional(Expr::Identifier(Symbol(0))),
+                        TupleMember::Positional(Expr::Identifier(Symbol(1))),
+                    ]))
+                ])
+            })
         );
         assert_eq!(
-            parse(
+            parse_module(
                 r#"
                 import (
                     x "x"
                     y "y"
                 )
-                let point = Point(x, y)
+                let point = (x, y)
                 point
-                "#
+                "#,
+                &a
             ),
-            Ok(Expr::Block(
-                vec![Import(Symbol(0), "x".into()), Import(Symbol(1), "y".into())],
-                vec![Let(
-                    Pattern::Identifier(Symbol(2)),
-                    Expr::Tuple(Tuple {
-                        symbol: Some(Symbol(3)),
-                        positional: vec![Expr::Identifier(Symbol(0)), Expr::Identifier(Symbol(1))],
-                        named: vec![],
-                    })
-                    .into()
-                )],
-                vec![Expr::Identifier(Symbol(2))]
-            ))
+            Ok(Module {
+                imports: &[
+                    Import(Pattern::Identifier(Symbol(0)), "x"),
+                    Import(Pattern::Identifier(Symbol(1)), "y"),
+                ],
+                body: Expr::Block(&[
+                    Statement::Let(
+                        Pattern::Identifier(Symbol(2)),
+                        Expr::Tuple(&[
+                            TupleMember::Positional(Expr::Identifier(Symbol(0))),
+                            TupleMember::Positional(Expr::Identifier(Symbol(1)))
+                        ])
+                    ),
+                    Statement::Expr(Expr::Identifier(Symbol(2)))
+                ])
+            })
         );
     }
 }
-*/

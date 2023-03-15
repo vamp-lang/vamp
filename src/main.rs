@@ -6,9 +6,11 @@ mod repl;
 mod source;
 mod symbol;
 mod watch;
-use eval::Environment;
-use repl::repl;
-use source::SourceEvent;
+use crate::parse::parse_statement;
+use crate::repl::repl;
+use crate::source::SourceEvent;
+use crate::symbol::Interner;
+use bumpalo::Bump;
 use std::{env, fs, io, path::Path, sync::mpsc, thread};
 use watch::watch;
 
@@ -39,16 +41,17 @@ fn main() {
         repl(sender);
     });
 
+    let mut interner = Interner::new();
+
     // Handle all source events.
-    let mut environment = Environment::new();
     for event in receiver {
         match event {
             SourceEvent::File(path) => {
                 match fs::read_to_string(path) {
                     Ok(source) => {
-                        if let Err(error) = environment.eval(&source) {
-                            println!("error: {:?}", error);
-                        }
+                        let arena = Bump::new();
+                        let result = parse_statement(&source, &arena, &mut interner);
+                        println!("{:?}", result);
                     }
                     Err(error) => {
                         if error.kind() == io::ErrorKind::NotFound {
@@ -57,10 +60,11 @@ fn main() {
                     }
                 }
             }
-            SourceEvent::Repl(source) => match environment.eval(&source) {
-                Ok(value) => println!("{}", value),
-                Err(error) => println!("error: {:?}", error),
-            },
+            SourceEvent::Repl(source) => {
+                let arena = Bump::new();
+                let result = parse_statement(&source, &arena, &mut interner);
+                println!("{:?}", result);
+            }
             SourceEvent::Exit => {
                 break;
             }

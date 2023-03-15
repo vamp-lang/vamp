@@ -1,4 +1,6 @@
-use crate::parse::{parse, Expr, Let, OperatorKind, Pattern};
+/*
+use crate::ast::{Expr, Let, OperatorKind, Pattern};
+use crate::parse::parse_module;
 use crate::source::Error as ParseError;
 use crate::symbol::{Interner, Symbol};
 use bumpalo::Bump;
@@ -228,8 +230,9 @@ impl Environment {
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
         let bump = Bump::new();
-        let expr =
-            &parse(source, &bump, &mut self.interner).map_err(|error| Error::ParseError(error))?;
+        let expr = &parse_module(source, &bump, &mut self.interner)
+            .map_err(|error| Error::ParseError(error))?;
         self.eval_expr(expr, Scope::new(None).into())
     }
 }
+*/
