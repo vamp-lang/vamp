@@ -24,7 +24,6 @@ pub enum ErrorKind {
     StringInvalidEscapeSequence,
     IntegerInvalid,
     FloatInvalid,
-    TuplePositionalAfterNamed,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

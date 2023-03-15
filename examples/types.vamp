@@ -53,4 +53,4 @@ let vec = [1, 2, 3]
 # Functions
 let f(x) = x + 10
 let g(y, z) = y * 2 + z / 100
-let lambda = (a, b, c) -> a + b + c
+let lambda = |a, b, c| a + b + c

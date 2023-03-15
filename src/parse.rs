@@ -157,17 +157,58 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
 
     fn int(&mut self) -> Result<Option<i64>> {
         if let Some(integer_span) = self.accept(TokenKind::Int) {
-            let mut value: i64 = 0;
             let error = Error {
                 kind: ErrorKind::IntegerInvalid,
                 span: integer_span,
             };
-            for digit in self.source[integer_span].bytes() {
-                value = value
-                    .checked_mul(10)
-                    .ok_or(error)?
-                    .checked_add((digit - b'0') as i64)
-                    .ok_or(error)?;
+            let mut value = 0i64;
+            let slice = &self.source[integer_span];
+            if slice.starts_with("0b") {
+                // Binary literal
+                // TODO: Optimize to use bit twiddling.
+                for digit in slice[2..].bytes() {
+                    value = value
+                        .checked_mul(2)
+                        .ok_or(error)?
+                        .checked_add((digit - b'0') as i64)
+                        .ok_or(error)?;
+                }
+            } else if slice.starts_with("0o") {
+                // Octal literal
+                // TODO: Optimize to use bit twiddling.
+                for digit in slice[2..].bytes() {
+                    value = value
+                        .checked_mul(8)
+                        .ok_or(error)?
+                        .checked_add((digit - b'0') as i64)
+                        .ok_or(error)?;
+                }
+            } else if slice.starts_with("0x") {
+                // Hexadecimal literal
+                // TODO: Optimize to use bit twiddling.
+                for digit in slice[2..].bytes() {
+                    let n = if matches!(digit, b'0'..=b'9') {
+                        (digit - b'0') as i64
+                    } else if matches!(digit, b'a'..=b'f') {
+                        10 + (digit - b'a') as i64
+                    } else {
+                        10 + (digit - b'A') as i64
+                    };
+                    value = value
+                        .checked_mul(16)
+                        .ok_or(error)?
+                        .checked_add(n)
+                        .ok_or(error)?;
+                }
+            } else {
+                // Decimal literal
+                for digit in slice.bytes() {
+                    value = value
+                        .checked_mul(10)
+                        .ok_or(error)?
+                        .checked_add((digit - b'0') as i64)
+                        .ok_or(error)?;
+                }
             }
             Ok(Some(value))
         } else {
@@ -209,7 +250,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
             let mut members = BumpVec::new_in(self.arena);
             if let Some(member) = self.tuple_member()? {
                 members.push(member);
-                while let Some(_comma_span) = self.accept(TokenKind::Comma) {
+                while self.accept(TokenKind::Comma).is_some() {
                     if let Some(member) = self.tuple_member()? {
                         members.push(member);
                     }
@@ -258,7 +299,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
 
     fn imports(&mut self) -> Result<&'ast [Import<'ast>]> {
         let mut imports = BumpVec::new_in(self.arena);
-        if let Some(_import_span) = self.accept(TokenKind::Import) {
+        if self.accept(TokenKind::Import).is_some() {
             let left_parenthesis_span = self
                 .accept(TokenKind::LParen)
                 .ok_or_else(|| self.invalid_token())?;
@@ -299,11 +340,11 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
 
     fn pattern_tuple(&mut self) -> Option<&'ast [PatternTupleMember<'ast>]> {
         let i = self.index;
-        if let Some(left_parenthesis_span) = self.accept(TokenKind::LParen) {
+        if self.accept(TokenKind::LParen).is_some() {
             let mut members = BumpVec::new_in(self.arena);
             if let Some(member) = self.pattern_tuple_member() {
                 members.push(member);
-                while let Some(_comma_span) = self.accept(TokenKind::Comma) {
+                while self.accept(TokenKind::Comma).is_some() {
                     if let Some(member) = self.pattern_tuple_member() {
                         members.push(member);
                     }
@@ -607,7 +648,7 @@ mod tests {
         //assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
         assert_eq!(parse_expr("123", &a), Ok(Expr::Int(123)));
         //assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
-        assert_eq!(parse_expr("000747", &a), Ok(Expr::Int(747)));
+        assert_eq!(parse_expr("0o747", &a), Ok(Expr::Int(0o747)));
         //assert_eq!(parse_expr("-002200"), Ok(Expr::Integer(-2200)));
         /*
         assert_eq!(

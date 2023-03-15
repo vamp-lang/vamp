@@ -228,7 +228,7 @@ impl<'a> Tokens<'a> {
                     return self.ok(TokenKind::Int);
                 }
                 // Octal literal
-                b'0' => {
+                b'o' => {
                     self.bump();
                     self.bump();
                     self.bump_while(|c| matches!(c, b'0'..=b'7'));

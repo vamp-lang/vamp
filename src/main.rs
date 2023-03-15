@@ -6,7 +6,7 @@ mod repl;
 mod source;
 mod symbol;
 mod watch;
-use crate::parse::parse_statement;
+use crate::parse::{parse_module, parse_statement};
 use crate::repl::repl;
 use crate::source::SourceEvent;
 use crate::symbol::Interner;
@@ -50,7 +50,7 @@ fn main() {
                 match fs::read_to_string(path) {
                     Ok(source) => {
                         let arena = Bump::new();
-                        let result = parse_statement(&source, &arena, &mut interner);
+                        let result = parse_module(&source, &arena, &mut interner);
                         println!("{:?}", result);
                     }
                     Err(error) => {
