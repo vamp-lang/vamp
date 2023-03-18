@@ -1,17 +1,20 @@
 mod ast;
-mod eval;
+mod compiler;
 mod lex;
 mod parse;
 mod repl;
 mod source;
 mod symbol;
+mod vm;
 mod watch;
-use crate::parse::{parse_module, parse_statement};
+use crate::parse::{parse_expr, parse_module};
 use crate::repl::repl;
 use crate::source::SourceEvent;
 use crate::symbol::Interner;
 use bumpalo::Bump;
+use compiler::compile;
 use std::{env, fs, io, path::Path, sync::mpsc, thread};
+use vm::{Scope, Vm};
 use watch::watch;
 
 fn main() {
@@ -42,6 +45,8 @@ fn main() {
     });
 
     let mut interner = Interner::new();
+    let mut vm = Vm::default();
+    let mut globals = Scope::default();
 
     // Handle all source events.
     for event in receiver {
@@ -62,8 +67,18 @@ fn main() {
             }
             SourceEvent::Repl(source) => {
                 let arena = Bump::new();
-                let result = parse_statement(&source, &arena, &mut interner);
-                println!("{:?}", result);
+                let result =
+                    parse_expr(&source, &arena, &mut interner).and_then(|ast| compile(&ast));
+                match result {
+                    Ok(bytecode) => match vm.run(&bytecode, &mut globals) {
+                        Ok(()) => {
+                            let val = vm.pop();
+                            println!("{:?}", val);
+                        }
+                        Err(error) => eprintln!("{:?}", error),
+                    },
+                    Err(error) => eprintln!("{:?}", error),
+                }
             }
             SourceEvent::Exit => {
                 break;

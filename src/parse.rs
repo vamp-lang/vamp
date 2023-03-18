@@ -1,5 +1,5 @@
 use crate::ast::{
-    BuiltIn, Expr, Import, Module, Pattern, PatternTupleMember, Statement, TupleMember,
+    BinOp, Expr, Import, Module, Pattern, PatternTupleMember, Statement, TupleMember,
 };
 use crate::lex::{tokenize, Token, TokenKind};
 use crate::source::{Error, ErrorKind, Result, Span};
@@ -37,13 +37,13 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
             .map(|slice| self.interner.intern(slice))
     }
 
-    fn accept_built_in(&mut self) -> Option<(BuiltIn, u8, u8)> {
+    fn accept_bin_op(&mut self) -> Option<(BinOp, u8, u8)> {
         if self.index < self.tokens.len() {
             let result = match self.tokens[self.index].kind {
-                TokenKind::Plus => (BuiltIn::Add, 1, 2),
-                TokenKind::Minus => (BuiltIn::Sub, 1, 2),
-                TokenKind::Times => (BuiltIn::Mul, 3, 4),
-                TokenKind::Divide => (BuiltIn::Div, 3, 4),
+                TokenKind::Plus => (BinOp::Add, 1, 2),
+                TokenKind::Minus => (BinOp::Sub, 1, 2),
+                TokenKind::Times => (BinOp::Mul, 3, 4),
+                TokenKind::Divide => (BinOp::Div, 3, 4),
                 _ => return None,
             };
             self.index += 1;
@@ -417,7 +417,7 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
             if statements.len() == 0 {
                 Ok(Some(Expr::Void))
             } else if let [Statement::Expr(expr)] = statements {
-                Ok(Some(expr.clone()))
+                Ok(Some(*expr))
             } else {
                 Ok(Some(Expr::Block(&statements)))
             }
@@ -486,22 +486,13 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
                 left = Expr::Call(self.arena.alloc(left), members);
             }
             loop {
-                if let Some((built_in, left_precedence, right_precedence)) = self.accept_built_in()
-                {
+                if let Some((bin_op, left_precedence, right_precedence)) = self.accept_bin_op() {
                     if left_precedence < min_precedence {
                         self.index -= 1;
                         break;
                     }
                     if let Some(right) = self.expr_with_precedence(right_precedence)? {
-                        let args = bumpalo::vec![
-                            in &self.arena;
-                            TupleMember::Positional(left),
-                            TupleMember::Positional(right),
-                        ];
-                        left = Expr::Call(
-                            self.arena.alloc(Expr::BuiltIn(built_in)),
-                            args.into_bump_slice(),
-                        );
+                        left = Expr::BinOp(bin_op, self.arena.alloc(left), self.arena.alloc(right));
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -729,91 +720,51 @@ mod tests {
         let a = Bump::new();
         assert_eq!(
             parse_expr("0 + 0", &a),
-            Ok(Expr::Call(
-                &Expr::BuiltIn(BuiltIn::Add),
-                &[
-                    TupleMember::Positional(Expr::Int(0)),
-                    TupleMember::Positional(Expr::Int(0))
-                ]
-            ))
+            Ok(Expr::BinOp(BinOp::Add, &Expr::Int(0), &Expr::Int(0)))
         );
         assert_eq!(
             parse_expr("0 * 0", &a),
-            Ok(Expr::Call(
-                &Expr::BuiltIn(BuiltIn::Mul),
-                &[
-                    TupleMember::Positional(Expr::Int(0)),
-                    TupleMember::Positional(Expr::Int(0))
-                ]
-            ))
+            Ok(Expr::BinOp(BinOp::Mul, &Expr::Int(0), &Expr::Int(0)))
         );
         assert_eq!(
             parse_expr("0 + 0 * 0", &a),
-            Ok(Expr::Call(
-                &Expr::BuiltIn(BuiltIn::Add),
-                &[
-                    TupleMember::Positional(Expr::Int(0)),
-                    TupleMember::Positional(Expr::Call(
-                        &Expr::BuiltIn(BuiltIn::Mul),
-                        &[
-                            TupleMember::Positional(Expr::Int(0)),
-                            TupleMember::Positional(Expr::Int(0))
-                        ],
-                    )),
-                ],
+            Ok(Expr::BinOp(
+                BinOp::Add,
+                &Expr::Int(0),
+                &Expr::BinOp(BinOp::Mul, &Expr::Int(0), &Expr::Int(0),)
             ))
         );
         assert_eq!(
             parse_expr("0 * 0 + 0 / 0 - 0", &a),
-            Ok(Expr::Call(
-                &Expr::BuiltIn(BuiltIn::Sub),
-                &[
-                    TupleMember::Positional(Expr::Call(
-                        &Expr::BuiltIn(BuiltIn::Add),
-                        &[
-                            TupleMember::Positional(Expr::Call(
-                                &Expr::BuiltIn(BuiltIn::Mul),
-                                &[
-                                    TupleMember::Positional(Expr::Int(0)),
-                                    TupleMember::Positional(Expr::Int(0))
-                                ]
-                            )),
-                            TupleMember::Positional(Expr::Call(
-                                &Expr::BuiltIn(BuiltIn::Div),
-                                &[
-                                    TupleMember::Positional(Expr::Int(0)),
-                                    TupleMember::Positional(Expr::Int(0))
-                                ]
-                            ))
-                        ]
-                    )),
-                    TupleMember::Positional(Expr::Int(0))
-                ]
-            )),
+            Ok(Expr::BinOp(
+                BinOp::Sub,
+                &Expr::BinOp(
+                    BinOp::Add,
+                    &Expr::BinOp(BinOp::Mul, &Expr::Int(0), &Expr::Int(0)),
+                    &Expr::BinOp(BinOp::Div, &Expr::Int(0), &Expr::Int(0)),
+                ),
+                &Expr::Int(0),
+            ))
         );
         assert_eq!(
             parse_expr("f(x) * g(y) + h(z)", &a),
-            Ok(Expr::Call(
-                &Expr::BuiltIn(BuiltIn::Add),
-                &[
-                    TupleMember::Positional(Expr::Call(
-                        &Expr::BuiltIn(BuiltIn::Mul),
-                        &[
-                            TupleMember::Positional(Expr::Call(
-                                &Expr::Identifier(Symbol(0)),
-                                &[TupleMember::Positional(Expr::Identifier(Symbol(1)))]
-                            )),
-                            TupleMember::Positional(Expr::Call(
-                                &Expr::Identifier(Symbol(2)),
-                                &[TupleMember::Positional(Expr::Identifier(Symbol(3)))]
-                            )),
-                        ]
-                    )),
-                    TupleMember::Positional(Expr::Call(
-                        &Expr::Identifier(Symbol(4)),
-                        &[TupleMember::Positional(Expr::Identifier(Symbol(5)))]
-                    )),
-                ]
+            Ok(Expr::BinOp(
+                BinOp::Add,
+                &Expr::BinOp(
+                    BinOp::Mul,
+                    &Expr::Call(
+                        &Expr::Identifier(Symbol(0)),
+                        &[TupleMember::Positional(Expr::Identifier(Symbol(1)))],
+                    ),
+                    &Expr::Call(
+                        &Expr::Identifier(Symbol(2)),
+                        &[TupleMember::Positional(Expr::Identifier(Symbol(3)))],
+                    )
+                ),
+                &Expr::Call(
+                    &Expr::Identifier(Symbol(4)),
+                    &[TupleMember::Positional(Expr::Identifier(Symbol(5)))],
+                )
             )),
         );
     }

@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, Deserialize, Serialize)]
 pub struct Symbol(pub u32);
 
 pub struct Interner {
