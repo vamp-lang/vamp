@@ -1,0 +1,10 @@
+import (
+  (api:) 'api'
+  (db:) 'db'
+  (createApiClient:) 'api/client'
+)
+
+use @api = createApiClient()
+
+let user = api.getUser(1)
+print("Hello user ${user}")

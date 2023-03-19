@@ -1,0 +1,26 @@
+# `ctx` introduces new, globally unqiue context identifier.
+ctx @x
+ctx @y
+
+# `use` binds a context identifier to a value.
+use @x = 10
+use @y = 20
+
+# Expressions containing context variables are implicitly parametrized by the
+# context they require
+let sum = || @x + @y
+
+# In the example above, `sum` is a function which appears to take no arguments.
+# However, during static analysis, vamp implicitly parametrizes this expression
+# as if it were a function taking `|@x, @y|` as arguments.
+sum()
+
+# Below, we create context `truth` and a function `takenOutOfContext` which
+# depends on it. Because `takenOutOfContext` is a function that hasn't been
+# called, Vamp's typechecker is perfectly happy with the below.
+ctx information
+let takenOutOfContext = || @information + "Ethan was being grumpy."
+
+# However, attempting to call this function without providing context will fail
+# typechecking.
+takenOutOfContext()

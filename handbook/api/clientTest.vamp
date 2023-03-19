@@ -1,0 +1,22 @@
+import (
+  (api:) 'api'
+  (createApiMock:) 'api/test'
+)
+
+use @api = createApiMock()
+api.get(
+  "users/0"
+  (
+    firstName: "Ethan"
+    lastName: "Lynn"
+  )
+)
+api.get(
+  "users/1"
+  (
+    firstName: "Allison"
+    lastName: "Ariemma"
+  )
+)
+
+expect(someDataTransformFunction(), 1)

@@ -5,14 +5,14 @@ use std::io::Cursor;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Tuple {
-    positional: Rc<[Val]>,
-    named: Rc<FxHashMap<Symbol, Val>>,
+pub struct Tuple<T> {
+    pos: Rc<[T]>,
+    named: Rc<FxHashMap<Symbol, T>>,
 }
 
-impl Tuple {
-    pub fn new(positional: Rc<[Val]>, named: Rc<FxHashMap<Symbol, Val>>) -> Self {
-        Tuple { positional, named }
+impl<T> Tuple<T> {
+    pub fn new(pos: Rc<[T]>, named: Rc<FxHashMap<Symbol, T>>) -> Self {
+        Tuple { pos, named }
     }
 }
 
@@ -22,20 +22,14 @@ pub enum Val {
     Int(i64),
     Float(f64),
     Function(Rc<[u8]>),
-    Tuple(Tuple),
+    Tuple(Tuple<Val>),
     Vector(Rc<[Val]>),
     Symbol(Symbol),
     String(Rc<str>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PatternTuple {
-    positional: Rc<[Pattern]>,
-    named: Rc<FxHashMap<Symbol, Pattern>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Pattern {
+pub enum Pat {
     Ignore,
     Nil,
     Int(i64),
@@ -43,9 +37,9 @@ pub enum Pattern {
     Symbol(Symbol),
     String(Rc<str>),
     Identifier(Symbol),
-    Tuple(PatternTuple),
-    Vector(Rc<[Pattern]>),
-    Any(Rc<[Pattern]>),
+    Tuple(Tuple<Pat>),
+    Vector(Rc<[Pat]>),
+    Any(Rc<[Pat]>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +49,7 @@ pub enum Op {
     Push(Val),
     Load(Symbol),
     Store(Symbol),
-    Match(Pattern),
+    Match(Pat),
     Add,
     Sub,
     Mul,
@@ -101,19 +95,19 @@ impl<'a> Scope<'a> {
         self.bindings.insert(symbol, val);
     }
 
-    fn r#match(&mut self, pattern: Pattern, val: Val) -> Result<(), Error> {
+    fn r#match(&mut self, pattern: Pat, val: Val) -> Result<(), Error> {
         match (pattern, val) {
-            (Pattern::Ignore, _) => Ok(()),
-            (Pattern::Nil, Val::Nil) => Ok(()),
-            (Pattern::Int(a), Val::Int(b)) if a == b => Ok(()),
-            (Pattern::Float(a), Val::Float(b)) if a == b => Ok(()),
-            (Pattern::Symbol(a), Val::Symbol(b)) if a == b => Ok(()),
-            (Pattern::String(a), Val::String(b)) if a == b => Ok(()),
-            (Pattern::Identifier(symbol), val) => {
+            (Pat::Ignore, _) => Ok(()),
+            (Pat::Nil, Val::Nil) => Ok(()),
+            (Pat::Int(a), Val::Int(b)) if a == b => Ok(()),
+            (Pat::Float(a), Val::Float(b)) if a == b => Ok(()),
+            (Pat::Symbol(a), Val::Symbol(b)) if a == b => Ok(()),
+            (Pat::String(a), Val::String(b)) if a == b => Ok(()),
+            (Pat::Identifier(symbol), val) => {
                 self.store(symbol, val);
                 Ok(())
             }
-            (Pattern::Any(patterns), val) => patterns
+            (Pat::Any(patterns), val) => patterns
                 .into_iter()
                 .try_for_each(|pattern| self.r#match(pattern.clone(), val.clone())),
             _ => Err(Error::MatchError),

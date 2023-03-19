@@ -1,16 +1,16 @@
 use crate::symbol::Symbol;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum PatternTupleMember<'ast> {
-    Positional(Pattern<'ast>),
-    Named(Symbol, Pattern<'ast>),
+pub enum TupMember<'ast, T> {
+    Pos(T),
+    Named(Symbol, T),
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Pattern<'ast> {
+pub enum Pat<'ast> {
     Nil,
     Tuple(&'ast [PatternTupleMember<'ast>]),
-    Vector(&'ast [Pattern<'ast>]),
+    Vector(&'ast [Pat<'ast>]),
     Identifier(Symbol),
     Symbol(Symbol),
     String(&'ast str),
@@ -19,15 +19,9 @@ pub enum Pattern<'ast> {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum TupleMember<'ast> {
-    Positional(Expr<'ast>),
-    Named(Symbol, Expr<'ast>),
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum Statement<'ast> {
-    Use(Pattern<'ast>, Expr<'ast>),
-    Let(Pattern<'ast>, Expr<'ast>),
+pub enum Stmt<'ast> {
+    Use(Pat<'ast>, Expr<'ast>),
+    Let(Pat<'ast>, Expr<'ast>),
     Expr(Expr<'ast>),
 }
 
@@ -43,12 +37,10 @@ pub enum BinOp {
 pub enum Expr<'ast> {
     Void,
     Nil,
-    Block(&'ast [Statement<'ast>]),
-    If(&'ast Expr<'ast>, &'ast [Statement<'ast>]),
-    For(&'ast Expr<'ast>, &'ast [Statement<'ast>]),
-    Tuple(&'ast [TupleMember<'ast>]),
+    Block(&'ast [Stmt<'ast>]),
+    Tuple(&'ast [TupMember<'ast>]),
     Vector(&'ast [Expr<'ast>]),
-    Call(&'ast Expr<'ast>, &'ast [TupleMember<'ast>]),
+    Call(&'ast Expr<'ast>, &'ast [TupMember<'ast>]),
     Function(&'ast [PatternTupleMember<'ast>], &'ast Expr<'ast>),
     Identifier(Symbol),
     Symbol(Symbol),
@@ -59,7 +51,7 @@ pub enum Expr<'ast> {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct Import<'ast>(pub Pattern<'ast>, pub &'ast str);
+pub struct Import<'ast>(pub Pat<'ast>, pub &'ast str);
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Module<'ast> {

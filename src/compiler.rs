@@ -28,8 +28,8 @@ impl<W: Write> Compiler<W> {
             Expr::Symbol(s) => self.write(&Op::Push(Val::Symbol(s))),
             Expr::String(s) => self.write(&Op::Push(Val::String(s.into()))),
             Expr::BinOp(bin_op, l, r) => {
-                self.compile(l);
-                self.compile(r);
+                self.compile(l)?;
+                self.compile(r)?;
                 self.write(&match bin_op {
                     BinOp::Add => Op::Add,
                     BinOp::Sub => Op::Sub,

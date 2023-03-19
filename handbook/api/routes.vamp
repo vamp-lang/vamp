@@ -1,0 +1,41 @@
+import (
+  (api:, params:) 'api'
+  (sql:) 'sql'
+  (db:) 'api'
+  (fe:) 'fe'
+)
+
+let listUsersQuery = @sql.query({
+  SELECT * FROM users
+})
+
+let listUsers = @api.get("users", || {
+  @db.query(listUsersQuery())
+})
+
+let getUserQuery = @sql.query("
+  SELECT * FROM user WHERE id = {id}
+")
+
+let getUser = @api.get("users/{id}", || {
+  @db.query(getUserQuery(id: @params.id))
+})
+
+let user = {
+  use @syntax = 
+}
+
+let users = @fe.component(|| {
+  let users = listUsers()
+
+  <div>
+    <h2>Users</h2>
+    <ul>
+      {users.map(|user| {
+        <li>
+          {user.firstName} {user.lastName}
+        </li>
+      })}
+    </ul>
+  </div>
+})

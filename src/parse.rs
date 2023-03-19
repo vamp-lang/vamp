@@ -387,6 +387,20 @@ impl<'ast, 'src, 'sym> Parser<'ast, 'src, 'sym> {
             } else {
                 Ok(Some(Statement::Let(pattern, expr)))
             }
+        } else if self.accept(TokenKind::Use).is_some() {
+            let pattern = self.pattern().ok_or_else(|| self.invalid_token())?;
+            let args = self.pattern_tuple();
+            self.accept(TokenKind::Equals)
+                .ok_or_else(|| self.invalid_token())?;
+            let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
+            if let Some(args) = args {
+                Ok(Some(Statement::Let(
+                    pattern,
+                    Expr::Function(self.arena.alloc(args), self.arena.alloc(expr)),
+                )))
+            } else {
+                Ok(Some(Statement::Use(pattern, expr)))
+            }
         } else if let Some(expr) = self.expr()? {
             Ok(Some(Statement::Expr(expr)))
         } else {
