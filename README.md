@@ -2,9 +2,12 @@
 
 A programming language for radical productivity.
 
-Note: This implementation is in its infancy.
+Vamp is in its infancy. The language has yet to be fully specified or implemented as it evolves from its mathematical conception. It is an ambitious project to rethink the way programming languages compose state and behavior and unify the principles of pure functional programming and imperative programming. There are also many interesting topics that need more exploring and a bunch of mathematical problems I haven't fully solved. If you are a programming language enthusiast, please proceed (I'd love feedback).
+
+Goals:
 
 - A tiny core language
+- A preference for functional programming
 - A preference for consistency over convenience
 - Static typing with powerful inference
 - Context variables
@@ -23,7 +26,7 @@ For the most part, you see types where you care about seeing types: in your edit
 
 ## Vamp has context variables
 
-Context variables are an concept that came from Common Lisp. Unlike normal variables, which have block-scoping, context variables are inherited by the call stack.
+Vamp's context variables are inspired by Common Lisp and, to some extent, React. Unlike normal variables, which have block-scoping, context variables are inherited by the call stack.
 
 ```
 ctx @message: String
@@ -124,11 +127,3 @@ assert(listUsers() == someFakeUserData)
 ```
 
 No more mocking and shimming, no more target compilation pragmas. Context-dependent execution is a language feature.
-
-## Imperative-functional equivalence
-
-Vamp has a unique way of representing many kinds of imperative control-flow constructs as purely functional types.
-
-Mathematically, the control flow is extracted into a stack of Monads.
-
-The result is a programming language that feels and performs like an imperative language, but inherits the benefits of strong, purely functional type system.

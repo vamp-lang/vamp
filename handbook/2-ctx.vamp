@@ -3,8 +3,8 @@ ctx @x
 ctx @y
 
 # `use` binds a context identifier to a value.
-use @x = 10
-use @y = 20
+let @x = 10
+let @y = 20
 
 # Expressions containing context variables are implicitly parametrized by the
 # context they require
