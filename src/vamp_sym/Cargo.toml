@@ -1,0 +1,11 @@
+[package]
+name = "vamp_sym"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustc-hash = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[features]
+serde = ["dep:serde"]

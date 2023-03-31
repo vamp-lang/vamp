@@ -1,0 +1,10 @@
+[package]
+name = "vamp_ty"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vamp_sym = { path = "../vamp_sym" }
+vamp_tuple = { path = "../vamp_tuple" }
+
+[features]

@@ -1,13 +1,13 @@
 mod ast;
 mod compiler;
-mod lex;
-mod parse;
+mod lexer;
+mod parser;
 mod repl;
 mod source;
 mod symbol;
 mod vm;
 mod watch;
-use crate::parse::{parse_expr, parse_module};
+use crate::parser::{parse_expr, parse_module};
 use crate::repl::repl;
 use crate::source::SourceEvent;
 use crate::symbol::Interner;

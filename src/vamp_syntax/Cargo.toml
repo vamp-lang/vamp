@@ -1,0 +1,9 @@
+[package]
+name = "vamp_syntax"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vamp_sym = { path = "../vamp_sym" }
+vamp_tuple = { path = "../vamp_tuple" }
+vamp_ty = { path = "../vamp_ty" }

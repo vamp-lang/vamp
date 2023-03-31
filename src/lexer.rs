@@ -21,9 +21,8 @@ pub enum TokenKind {
     Pipe,
 
     // Keywords
-    Import,
-    Export,
     Use,
+    Ctx,
     Let,
     If,
     Else,
@@ -173,12 +172,11 @@ impl<'a> Tokens<'a> {
     }
 
     fn identifier(&mut self) -> Option<Result<Token>> {
-        if self.bump_if(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'_')) {
+        if self.bump_if(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'_' | b'@')) {
             self.bump_while(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_'));
             self.ok(match &self.source[self.span] {
-                "import" => TokenKind::Import,
-                "export" => TokenKind::Export,
                 "use" => TokenKind::Use,
+                "ctx" => TokenKind::Ctx,
                 "let" => TokenKind::Let,
                 "if" => TokenKind::If,
                 "else" => TokenKind::Else,
@@ -345,9 +343,8 @@ mod tests {
             (TokenKind::Times, "*"),
             (TokenKind::Divide, "/"),
             // Keywords
-            (TokenKind::Import, "import"),
-            (TokenKind::Export, "export"),
             (TokenKind::Use, "use"),
+            (TokenKind::Ctx, "ctx"),
             (TokenKind::Let, "let"),
             (TokenKind::If, "if"),
             (TokenKind::Else, "else"),
@@ -363,6 +360,8 @@ mod tests {
             (TokenKind::Identifier, "X1"),
             (TokenKind::Identifier, "Identifier"),
             (TokenKind::Identifier, "SHIFT_RIGHT"),
+            (TokenKind::Identifier, "@"),
+            (TokenKind::Identifier, "@self"),
             // Symbol literals
             (TokenKind::Symbol, "''"),
             (TokenKind::Symbol, "'_'"),

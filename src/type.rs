@@ -2,7 +2,7 @@
 pub enum Type {
     Void,
     Nil,
-    Tuple,
+    Tuple(Tuple),
     Int,
     Float,
     Symbol,

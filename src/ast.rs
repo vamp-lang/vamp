@@ -1,7 +1,7 @@
 use crate::symbol::Symbol;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum TupMember<'ast, T> {
+pub enum TupMember<T> {
     Pos(T),
     Named(Symbol, T),
 }
@@ -9,7 +9,7 @@ pub enum TupMember<'ast, T> {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Pat<'ast> {
     Nil,
-    Tuple(&'ast [PatternTupleMember<'ast>]),
+    Tuple(&'ast [TupMember<Pat<'ast>>]),
     Vector(&'ast [Pat<'ast>]),
     Identifier(Symbol),
     Symbol(Symbol),
@@ -38,10 +38,10 @@ pub enum Expr<'ast> {
     Void,
     Nil,
     Block(&'ast [Stmt<'ast>]),
-    Tuple(&'ast [TupMember<'ast>]),
+    Tuple(&'ast [TupMember<Expr<'ast>>]),
     Vector(&'ast [Expr<'ast>]),
-    Call(&'ast Expr<'ast>, &'ast [TupMember<'ast>]),
-    Function(&'ast [PatternTupleMember<'ast>], &'ast Expr<'ast>),
+    Call(&'ast Expr<'ast>, &'ast [TupMember<Expr<'ast>>]),
+    Function(&'ast [TupMember<Expr<'ast>>], &'ast Expr<'ast>),
     Identifier(Symbol),
     Symbol(Symbol),
     String(&'ast str),
