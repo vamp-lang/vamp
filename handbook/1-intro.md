@@ -71,15 +71,7 @@ let groceries = ["oatmilk", "pancake syrup", "eggs"]
 
 ## Maps
 
-Maps or associative arrays, are also delimited by `[, ]`:
-```
-let lookup = ["key": "value", "asdf": "asdf"]
-```
-
-To resolve ambiguity with arrays, an empty map is defined as `[:]`:
-```
-let emptyMap = [:]
-```
+...Coming soon...
 
 ## Note about commas
 
@@ -101,4 +93,6 @@ let multilineArray = [
 
 No trailing-comma vs no-trailing-comma debate in Vamp!
 
->>> Note: The rest of Vamp's syntax prevents you from ever needing to escape a newline with "\", like in Python or other whitespace-sensitive languages.
+> Note: Vamp determines whether or not a comma should be inserted at the end of a line based on the preceding token. Lines ending in opening delimiters like `(,[,{` or operators `+,-,*,/,...` 
+>
+> In practice, this whitespace significance doesn't cause much ambiguity. However, when breaking expressions containing binary operators `+,-,*,/,...` across multiple lines, the operator must be placed at the end of a line to preserve the expression.
