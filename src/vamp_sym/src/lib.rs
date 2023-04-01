@@ -29,6 +29,16 @@ impl Interner {
         symbol
     }
 
+    /// Generates a private symbol.
+    pub fn private(&mut self) -> Sym {
+        let n = self.vector.len() as u32;
+        let symbol = Sym(n);
+        let string = format!("#{}", n);
+        self.map.insert(string.clone(), symbol);
+        self.vector.push(string);
+        symbol
+    }
+
     /// Looks up the string value of `symbol`.
     pub fn lookup(&self, symbol: Sym) -> &str {
         &self.vector[symbol.0 as usize]

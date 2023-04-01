@@ -3,13 +3,13 @@ use crate::span::Span;
 /// A type of syntax error.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ErrorKind {
-    UnbalancedDelimiters,
-    InvalidCharacter,
+    Delimiters,
+    InvalidChar,
     InvalidToken,
-    StringUnterminated,
-    StringInvalidEscapeSequence,
     IntInvalid,
     FloatInvalid,
+    StringUnterminated,
+    StringEscSeqInvalid,
     NoUnboundExprAtModuleLevel,
 }
 

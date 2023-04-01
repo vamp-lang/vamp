@@ -18,12 +18,30 @@ pub enum TokenKind {
     Comma,
     Colon,
     Period,
-    Equals,
+
+    // Operators
     Plus,
     Minus,
-    Times,
-    Divide,
-    Pipe,
+    Star,
+    StarStar,
+    Slash,
+    Percent,
+    Eq,
+    EqEq,
+    NotEq,
+    Lt,
+    LtLt,
+    LtEq,
+    Gt,
+    GtGt,
+    GtEq,
+    Not,
+    And,
+    AndAnd,
+    Or,
+    OrOr,
+    Caret,
+    Tilde,
 
     // Keywords
     Use,
@@ -156,24 +174,70 @@ impl<'a> Tokens<'a> {
             self.ok(TokenKind::LBrace)
         } else if self.bump_if(|c| c == b'}') {
             self.ok(TokenKind::RBrace)
-        } else if self.bump_if(|c| c == b'|') {
-            self.ok(TokenKind::Pipe)
         } else if self.bump_if(|c| c == b',') {
             self.ok(TokenKind::Comma)
         } else if self.bump_if(|c| c == b':') {
             self.ok(TokenKind::Colon)
         } else if self.bump_if(|c| c == b'.') {
             self.ok(TokenKind::Period)
-        } else if self.bump_if(|c| c == b'=') {
-            self.ok(TokenKind::Equals)
         } else if self.bump_if(|c| c == b'+') {
             self.ok(TokenKind::Plus)
         } else if self.bump_if(|c| c == b'-') {
             self.ok(TokenKind::Minus)
         } else if self.bump_if(|c| c == b'*') {
-            self.ok(TokenKind::Times)
+            if self.bump_if(|c| c == b'*') {
+                self.ok(TokenKind::StarStar)
+            } else {
+                self.ok(TokenKind::Star)
+            }
         } else if self.bump_if(|c| c == b'/') {
-            self.ok(TokenKind::Divide)
+            self.ok(TokenKind::Slash)
+        } else if self.bump_if(|c| c == b'%') {
+            self.ok(TokenKind::Percent)
+        } else if self.bump_if(|c| c == b'=') {
+            if self.bump_if(|c| c == b'=') {
+                self.ok(TokenKind::EqEq)
+            } else {
+                self.ok(TokenKind::Eq)
+            }
+        } else if self.bump_if(|c| c == b'!') {
+            if self.bump_if(|c| c == b'=') {
+                self.ok(TokenKind::NotEq)
+            } else {
+                self.ok(TokenKind::Not)
+            }
+        } else if self.bump_if(|c| c == b'>') {
+            if self.bump_if(|c| c == b'>') {
+                self.ok(TokenKind::GtGt)
+            } else if self.bump_if(|c| c == b'=') {
+                self.ok(TokenKind::GtEq)
+            } else {
+                self.ok(TokenKind::Gt)
+            }
+        } else if self.bump_if(|c| c == b'<') {
+            if self.bump_if(|c| c == b'<') {
+                self.ok(TokenKind::LtLt)
+            } else if self.bump_if(|c| c == b'=') {
+                self.ok(TokenKind::LtEq)
+            } else {
+                self.ok(TokenKind::Lt)
+            }
+        } else if self.bump_if(|c| c == b'&') {
+            if self.bump_if(|c| c == b'&') {
+                self.ok(TokenKind::AndAnd)
+            } else {
+                self.ok(TokenKind::And)
+            }
+        } else if self.bump_if(|c| c == b'|') {
+            if self.bump_if(|c| c == b'|') {
+                self.ok(TokenKind::OrOr)
+            } else {
+                self.ok(TokenKind::Or)
+            }
+        } else if self.bump_if(|c| c == b'^') {
+            self.ok(TokenKind::Caret)
+        } else if self.bump_if(|c| c == b'~') {
+            self.ok(TokenKind::Tilde)
         } else {
             None
         }
@@ -273,7 +337,7 @@ impl<'a> Tokens<'a> {
 
     fn error(&mut self) -> Option<Result<Token>> {
         if self.bump_if(|c| c != b'\0') {
-            self.err(ErrorKind::InvalidCharacter, None)
+            self.err(ErrorKind::InvalidChar, None)
         } else {
             None
         }

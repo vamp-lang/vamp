@@ -26,9 +26,25 @@ pub enum Stmt {
     Expr(Expr),
 }
 
+// Unary operators.
+#[derive(Debug, PartialEq, Clone)]
+pub enum UnOp {
+    /// Negation `(-)`
+    Neg,
+    /// Logical not `(!)`
+    Not,
+    /// Bitwise not `(~)`
+    BitNot,
+}
+
 /// Binary operators.
 #[derive(Debug, PartialEq, Clone)]
 pub enum BinOp {
+    // Property lookup
+    /// Dot `(.)`
+    Dot,
+
+    // Mathematical
     /// Addition `(+)`
     Add,
     /// Subtraction `(-)`
@@ -37,6 +53,40 @@ pub enum BinOp {
     Mul,
     /// Division `(/)`
     Div,
+    /// Modulo `(%)`
+    Mod,
+    /// Exponentiation `(**)`
+    Exp,
+
+    // Logical
+    /// Equality `(==)`
+    Eq,
+    /// Inequality `(!=)`
+    NotEq,
+    /// Less than `(<)`
+    Lt,
+    /// Less than or equal to `(<=)`
+    LtEq,
+    /// Greater than `(>)`
+    Gt,
+    /// Greater than or equal to `(>=)`
+    GtEq,
+    /// Logical and `(&&)`
+    And,
+    /// Logical or `(||)`
+    Or,
+
+    // Bitwise
+    /// Bitwise and `(&)`
+    BitAnd,
+    /// Bitwise or `(|)`
+    BitOr,
+    /// Bitwise xor `(^)`
+    Xor,
+    /// Bitwise left shift `(<<)`
+    ShiftL,
+    /// Bitwise right shift `(>>)`
+    ShiftR,
 }
 
 /// An expression. Except for a `Module`, which has no value, everything in Vamp
@@ -67,6 +117,8 @@ pub enum Expr {
     Int(i64),
     /// A floating point literal `1.2`.
     Float(f64),
+    /// A unary operator applied to a single operand expression.
+    UnOp(UnOp, Box<Expr>),
     /// A binary operator applied to two operand expressions.
     BinOp(BinOp, Box<Expr>, Box<Expr>),
 }

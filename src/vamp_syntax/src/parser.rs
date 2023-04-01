@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, Dep, Expr, Let, Mod, ModPath, Pat, Stmt},
+    ast::{BinOp, Dep, Expr, Let, Mod, ModPath, Pat, Stmt, UnOp},
     error::{Error, ErrorKind, Result},
     lexer::{tokenize, Token, TokenKind},
     span::Span,
@@ -46,13 +46,44 @@ impl<'src, 'sym> Parser<'src, 'sym> {
             .map(|slice| self.interner.intern(slice.into()))
     }
 
-    fn accept_bin_op(&mut self) -> Option<(BinOp, u8, u8)> {
+    fn accept_unary_op(&mut self) -> Option<(UnOp, u8)> {
         if self.index < self.tokens.len() {
             let result = match self.tokens[self.index].kind {
-                TokenKind::Plus => (BinOp::Add, 1, 2),
-                TokenKind::Minus => (BinOp::Sub, 1, 2),
-                TokenKind::Times => (BinOp::Mul, 3, 4),
-                TokenKind::Divide => (BinOp::Div, 3, 4),
+                TokenKind::Minus => (UnOp::Neg, 20),
+                TokenKind::Not => (UnOp::Not, 20),
+                TokenKind::Tilde => (UnOp::BitNot, 20),
+                _ => return None,
+            };
+            self.index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    fn accept_binary_op(&mut self) -> Option<(BinOp, u8, u8)> {
+        if self.index < self.tokens.len() {
+            let result = match self.tokens[self.index].kind {
+                TokenKind::OrOr => (BinOp::Or, 0, 1),
+                TokenKind::AndAnd => (BinOp::And, 2, 3),
+                TokenKind::EqEq => (BinOp::Eq, 4, 5),
+                TokenKind::NotEq => (BinOp::NotEq, 4, 5),
+                TokenKind::Lt => (BinOp::Lt, 4, 5),
+                TokenKind::LtEq => (BinOp::LtEq, 4, 5),
+                TokenKind::Gt => (BinOp::Gt, 4, 5),
+                TokenKind::GtEq => (BinOp::GtEq, 4, 5),
+                TokenKind::Or => (BinOp::BitOr, 6, 7),
+                TokenKind::Caret => (BinOp::Xor, 8, 9),
+                TokenKind::And => (BinOp::BitAnd, 10, 11),
+                TokenKind::LtLt => (BinOp::ShiftL, 12, 13),
+                TokenKind::GtGt => (BinOp::ShiftR, 12, 13),
+                TokenKind::Plus => (BinOp::Add, 14, 15),
+                TokenKind::Minus => (BinOp::Sub, 14, 15),
+                TokenKind::Star => (BinOp::Mul, 16, 17),
+                TokenKind::Slash => (BinOp::Div, 16, 17),
+                TokenKind::Percent => (BinOp::Mod, 16, 17),
+                TokenKind::StarStar => (BinOp::Exp, 18, 19),
+                TokenKind::Period => (BinOp::Dot, 20, 21),
                 _ => return None,
             };
             self.index += 1;
@@ -85,7 +116,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         while let Some(c) = chars.next() {
             if c == '\\' {
                 let invalid_escape_sequence = || Error {
-                    kind: ErrorKind::StringInvalidEscapeSequence,
+                    kind: ErrorKind::StringEscSeqInvalid,
                     detail: None,
                     span,
                 };
@@ -270,7 +301,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 }
             }
             self.accept(TokenKind::RParen).ok_or_else(|| Error {
-                kind: ErrorKind::UnbalancedDelimiters,
+                kind: ErrorKind::Delimiters,
                 detail: None,
                 span: lparen_span,
             })?;
@@ -293,7 +324,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 }
             }
             self.accept(TokenKind::RBracket).ok_or_else(|| Error {
-                kind: ErrorKind::UnbalancedDelimiters,
+                kind: ErrorKind::Delimiters,
                 detail: None,
                 span: left_bracket_span,
             })?;
@@ -356,7 +387,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         if self.accept(TokenKind::Let).is_some() {
             let pattern = self.pattern().ok_or_else(|| self.invalid_token())?;
             let args = self.pattern_tuple();
-            self.accept(TokenKind::Equals)
+            self.accept(TokenKind::Eq)
                 .ok_or_else(|| self.invalid_token())?;
             let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
             if let Some(args) = args {
@@ -388,7 +419,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         if let Some(left_brace_span) = self.accept(TokenKind::LBrace) {
             let statements = self.statements()?;
             self.accept(TokenKind::RBrace).ok_or_else(|| Error {
-                kind: ErrorKind::UnbalancedDelimiters,
+                kind: ErrorKind::Delimiters,
                 detail: None,
                 span: left_brace_span,
             })?;
@@ -431,7 +462,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 
     fn function_args(&mut self) -> Result<Option<Tuple<Pat>>> {
-        if self.accept(TokenKind::Pipe).is_some() {
+        if self.accept(TokenKind::Or).is_some() {
             let mut args = Vec::new();
             if let Some(arg) = self.pattern_tuple_entry() {
                 args.push(arg);
@@ -441,7 +472,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                     }
                 }
             }
-            self.accept(TokenKind::Pipe)
+            self.accept(TokenKind::Or)
                 .ok_or_else(|| self.invalid_token())?;
             Ok(Some(Tuple::from_iter(args)))
         } else {
@@ -459,18 +490,33 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 
     fn expr_with_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
-        if let Some(mut left) = self.atom()? {
-            if let Some(tuple) = self.tuple()? {
+        // Handle unary operators.
+        let left = if let Some((unary_op, r_precedence)) = self.accept_unary_op() {
+            if let Some(right) = self.expr_with_precedence(r_precedence)? {
+                Some(Expr::UnOp(unary_op, right.into()))
+            } else {
+                return Err(self.invalid_token());
+            }
+        } else if let Some(mut left) = self.atom()? {
+            // Handle function calls.
+            while let Some(tuple) = self.tuple()? {
                 left = Expr::Call(left.into(), tuple);
             }
+            Some(left)
+        } else {
+            None
+        };
+
+        // Handle binary operators.
+        if let Some(mut left) = left {
             loop {
-                if let Some((bin_op, left_precedence, right_precedence)) = self.accept_bin_op() {
-                    if left_precedence < min_precedence {
+                if let Some((binary_op, l_precedence, r_precedence)) = self.accept_binary_op() {
+                    if l_precedence < min_precedence {
                         self.index -= 1;
                         break;
                     }
-                    if let Some(right) = self.expr_with_precedence(right_precedence)? {
-                        left = Expr::BinOp(bin_op, left.into(), right.into());
+                    if let Some(right) = self.expr_with_precedence(r_precedence)? {
+                        left = Expr::BinOp(binary_op, left.into(), right.into());
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -478,6 +524,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                     break;
                 }
             }
+
             Ok(Some(left))
         } else {
             Ok(None)

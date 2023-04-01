@@ -74,11 +74,11 @@ fn string_invalid_escape_sequence() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr(r#""\z""#, &mut interner).unwrap_err().kind,
-        ErrorKind::StringInvalidEscapeSequence
+        ErrorKind::StringEscSeqInvalid
     );
     assert_eq!(
         parse_expr(r#""\xFF""#, &mut interner).unwrap_err().kind,
-        ErrorKind::StringInvalidEscapeSequence
+        ErrorKind::StringEscSeqInvalid
     );
 }
 

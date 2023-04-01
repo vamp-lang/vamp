@@ -30,7 +30,7 @@ impl<W: Write> Compiler<W> {
             Expr::BinOp(bin_op, l, r) => {
                 self.compile(l)?;
                 self.compile(r)?;
-                self.write(&match bin_op {
+                self.write(&match bin_op mut {
                     BinOp::Add => Op::Add,
                     BinOp::Sub => Op::Sub,
                     BinOp::Mul => Op::Mul,
