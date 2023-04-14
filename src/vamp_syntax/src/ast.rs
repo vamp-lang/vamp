@@ -92,7 +92,7 @@ pub enum BinOp {
 /// An expression. Except for a `Module`, which has no value, everything in Vamp
 /// builds and composes from `Expr`.
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
+pub enum ExprKind {
     /// An empty sequence of statements `{}`.
     Void,
     /// A nonempty sequence of statements `{...}`.
@@ -123,6 +123,18 @@ pub enum Expr {
     BinOp(BinOp, Box<Expr>, Box<Expr>),
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct Expr {
+    pub ty: Ty,
+    pub kind: ExprKind,
+}
+
+impl Expr {
+    pub fn void(kind: ExprKind) -> Self {
+        Self { ty: Ty::Void, kind }
+    }
+}
+
 /// A module's location.
 #[derive(Debug, PartialEq, Clone)]
 pub struct ModPath {
@@ -146,7 +158,6 @@ pub struct Dep {
 pub struct Mod {
     /// A module's dependencies.
     pub dependencies: Box<[Dep]>,
-    /// A module's definitions. Does not use `Stmt` because unbound expressions
-    /// are not allowed at the module level.
-    pub definitions: Box<[Let]>,
+    /// A module's definitions.
+    pub definitions: Box<[Stmt]>,
 }

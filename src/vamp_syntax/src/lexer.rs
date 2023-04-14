@@ -365,6 +365,8 @@ impl<'a> Iterator for Tokens<'a> {
     }
 }
 
+// Average token length used to pre-allocate the token vector based on the
+// length of the source string.
 const AVERAGE_TOKEN_LEN: usize = 128;
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>> {

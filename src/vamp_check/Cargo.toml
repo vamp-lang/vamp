@@ -1,0 +1,8 @@
+[package]
+name = "vamp_checker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vamp_ty = { path = "../vamp_ty" }
+vamp_syntax = { path = "../vamp_syntax" }

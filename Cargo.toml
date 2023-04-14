@@ -5,6 +5,7 @@ members = [
   "src/vamp_syntax",
   "src/vamp_tuple",
   "src/vamp_ty",
+  "src/vamp_check",
 ]
 
 [workspace.dependencies]

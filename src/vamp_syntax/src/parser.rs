@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, Dep, Expr, Let, Mod, ModPath, Pat, Stmt, UnOp},
+    ast::{BinOp, Dep, Expr, ExprKind, Let, Mod, ModPath, Pat, Stmt, UnOp},
     error::{Error, ErrorKind, Result},
     lexer::{tokenize, Token, TokenKind},
     span::Span,
@@ -19,7 +19,7 @@ pub struct Parser<'src, 'sym> {
 
 impl<'src, 'sym> Parser<'src, 'sym> {
     fn new(source: &'src str, tokens: Vec<Token>, interner: &'sym mut Interner) -> Self {
-        Parser {
+        Self {
             source,
             tokens,
             index: 0,
@@ -276,10 +276,14 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn tuple_entry(&mut self) -> Result<Option<TupleEntry<Expr>>> {
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
-                let expr = self.expr()?.unwrap_or_else(|| Expr::Ident(identifier));
+                let expr = self
+                    .expr()?
+                    .unwrap_or_else(|| Expr::void(ExprKind::Ident(identifier)));
                 Ok(Some(TupleEntry::Named(identifier, expr)))
             } else {
-                Ok(Some(TupleEntry::Pos(Expr::Ident(identifier))))
+                Ok(Some(TupleEntry::Pos(Expr::void(ExprKind::Ident(
+                    identifier,
+                )))))
             }
         } else if let Some(expr) = self.expr()? {
             Ok(Some(TupleEntry::Pos(expr)))
@@ -391,7 +395,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 .ok_or_else(|| self.invalid_token())?;
             let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
             if let Some(args) = args {
-                Ok(Some(Stmt::Let(Let(pattern, Expr::Fn(args, expr.into())))))
+                Ok(Some(Stmt::Let(Let(
+                    pattern,
+                    Expr::void(ExprKind::Fn(args, expr.into())),
+                ))))
             } else {
                 Ok(Some(Stmt::Let(Let(pattern, expr.into()))))
             }
@@ -424,11 +431,11 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 span: left_brace_span,
             })?;
             if statements.len() == 0 {
-                Ok(Some(Expr::Void))
+                Ok(Some(Expr::void(ExprKind::Void)))
             } else if let [Stmt::Expr(expr)] = statements.as_ref() {
                 Ok(Some(expr.clone()))
             } else {
-                Ok(Some(Expr::Block(statements)))
+                Ok(Some(Expr::void(ExprKind::Block(statements))))
             }
         } else {
             Ok(None)
@@ -438,24 +445,24 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn atom(&mut self) -> Result<Option<Expr>> {
         if let Some(tuple) = self.tuple()? {
             if tuple.len() == 0 {
-                Ok(Some(Expr::Nil))
+                Ok(Some(Expr::void(ExprKind::Nil)))
             } else {
-                Ok(Some(Expr::Tuple(tuple)))
+                Ok(Some(Expr::void(ExprKind::Tuple(tuple))))
             }
         } else if let Some(list) = self.list()? {
-            Ok(Some(Expr::List(list)))
+            Ok(Some(Expr::void(ExprKind::List(list))))
         } else if let Some(block) = self.block()? {
             Ok(Some(block))
         } else if let Some(identifier) = self.identifier() {
-            Ok(Some(Expr::Ident(identifier)))
+            Ok(Some(Expr::void(ExprKind::Ident(identifier))))
         } else if let Some(symbol) = self.symbol()? {
-            Ok(Some(Expr::Sym(symbol)))
+            Ok(Some(Expr::void(ExprKind::Sym(symbol))))
         } else if let Some(string) = self.string()? {
-            Ok(Some(Expr::Str(string)))
+            Ok(Some(Expr::void(ExprKind::Str(string))))
         } else if let Some(int) = self.int()? {
-            Ok(Some(Expr::Int(int)))
+            Ok(Some(Expr::void(ExprKind::Int(int))))
         } else if let Some(float) = self.float()? {
-            Ok(Some(Expr::Float(float)))
+            Ok(Some(Expr::void(ExprKind::Float(float))))
         } else {
             Ok(None)
         }
@@ -482,8 +489,8 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn function(&mut self) -> Result<Option<Expr>> {
         if let Some(args) = self.function_args()? {
-            let expr = self.expr()?.unwrap_or(Expr::Void);
-            Ok(Some(Expr::Fn(args, expr.into())))
+            let expr = self.expr()?.unwrap_or_else(|| Expr::void(ExprKind::Void));
+            Ok(Some(Expr::void(ExprKind::Fn(args, expr.into()))))
         } else {
             Ok(None)
         }
@@ -493,14 +500,14 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         // Handle unary operators.
         let left = if let Some((unary_op, r_precedence)) = self.accept_unary_op() {
             if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                Some(Expr::UnOp(unary_op, right.into()))
+                Some(Expr::void(ExprKind::UnOp(unary_op, right.into())))
             } else {
                 return Err(self.invalid_token());
             }
         } else if let Some(mut left) = self.atom()? {
             // Handle function calls.
             while let Some(tuple) = self.tuple()? {
-                left = Expr::Call(left.into(), tuple);
+                left = Expr::void(ExprKind::Call(left.into(), tuple));
             }
             Some(left)
         } else {
@@ -516,7 +523,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                         break;
                     }
                     if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                        left = Expr::BinOp(binary_op, left.into(), right.into());
+                        left = Expr::void(ExprKind::BinOp(binary_op, left.into(), right.into()));
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -611,22 +618,11 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         Ok(dependencies.into())
     }
 
-    fn definitions(&mut self) -> Result<Box<[Let]>> {
-        let mut definitions = vec![];
-        if let Some(statement) = self.statement()? {
-            if let Stmt::Let(definition) = statement {
-                definitions.push(definition);
-            } else {
+    fn definitions(&mut self) -> Result<Box<[Stmt]>> {
+        let definitions = self.statements()?;
+        for definition in definitions.iter() {
+            if let Stmt::Expr(_) = definition {
                 return Err(self.invalid_token());
-            }
-            while self.accept(TokenKind::Comma).is_some() {
-                if let Some(statement) = self.statement()? {
-                    if let Stmt::Let(definition) = statement {
-                        definitions.push(definition);
-                    } else {
-                        return Err(self.invalid_token());
-                    }
-                }
             }
         }
         Ok(definitions.into())
@@ -643,20 +639,22 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 }
 
-pub fn parse_module(source: &str, interner: &mut Interner) -> Result<Mod> {
-    Parser::new(source, tokenize(source)?, interner).module()
+pub fn parse_expr(source: &str, interner: &mut Interner) -> Result<Expr> {
+    let expr = Parser::new(source, tokenize(source)?, interner)
+        .expr()?
+        .unwrap_or(Expr::void(ExprKind::Void));
+    Ok(expr)
 }
 
 pub fn parse_statement(source: &str, interner: &mut Interner) -> Result<Stmt> {
     let statement = Parser::new(source, tokenize(source)?, interner)
         .statement()?
-        .unwrap_or(Stmt::Expr(Expr::Void));
+        .unwrap_or(Stmt::Expr(Expr::void(ExprKind::Void)));
     Ok(statement)
 }
 
-pub fn parse_expr(source: &str, interner: &mut Interner) -> Result<Expr> {
-    let expr = Parser::new(source, tokenize(source)?, interner)
-        .expr()?
-        .unwrap_or(Expr::Void);
-    Ok(expr)
+pub fn parse_module(source: &str, interner: &mut Interner) -> Result<Mod> {
+    Parser::new(source, tokenize(source)?, interner).module()
 }
+
+
