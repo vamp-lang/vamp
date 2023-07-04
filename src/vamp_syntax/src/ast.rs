@@ -130,8 +130,11 @@ pub struct Expr {
 }
 
 impl Expr {
-    pub fn void(kind: ExprKind) -> Self {
-        Self { ty: Ty::Void, kind }
+    pub fn unknown(kind: ExprKind) -> Self {
+        Self {
+            ty: Ty::Unknown,
+            kind,
+        }
     }
 }
 

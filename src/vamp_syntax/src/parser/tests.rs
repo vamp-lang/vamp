@@ -13,35 +13,35 @@ fn identifiers() {
     let upper_camel_case = interner.intern("UpperCamelCase");
     assert_eq!(
         parse_expr("x", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(x)))
+        Ok(Expr::unknown(ExprKind::Ident(x)))
     );
     assert_eq!(
         parse_expr("y2", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(y2)))
+        Ok(Expr::unknown(ExprKind::Ident(y2)))
     );
     assert_eq!(
         parse_expr("@0", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(at_0)))
+        Ok(Expr::unknown(ExprKind::Ident(at_0)))
     );
     assert_eq!(
         parse_expr("@self", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(at_self)))
+        Ok(Expr::unknown(ExprKind::Ident(at_self)))
     );
     assert_eq!(
         parse_expr("lower_snake_case", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(lower_snake_case)))
+        Ok(Expr::unknown(ExprKind::Ident(lower_snake_case)))
     );
     assert_eq!(
         parse_expr("UPPER_SNAKE_CASE", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(upper_snake_case)))
+        Ok(Expr::unknown(ExprKind::Ident(upper_snake_case)))
     );
     assert_eq!(
         parse_expr("lowerCamelCase", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(lower_camel_case)))
+        Ok(Expr::unknown(ExprKind::Ident(lower_camel_case)))
     );
     assert_eq!(
         parse_expr("UpperCamelCase", &mut interner),
-        Ok(Expr::void(ExprKind::Ident(upper_camel_case)))
+        Ok(Expr::unknown(ExprKind::Ident(upper_camel_case)))
     );
 }
 
@@ -53,15 +53,15 @@ fn symbol() {
     let s3 = interner.intern("x");
     assert_eq!(
         parse_expr("''", &mut interner),
-        Ok(Expr::void(ExprKind::Sym(s1)))
+        Ok(Expr::unknown(ExprKind::Sym(s1)))
     );
     assert_eq!(
         parse_expr(r#"'\\'"#, &mut interner),
-        Ok(Expr::void(ExprKind::Sym(s2)))
+        Ok(Expr::unknown(ExprKind::Sym(s2)))
     );
     assert_eq!(
         parse_expr("'x'", &mut interner),
-        Ok(Expr::void(ExprKind::Sym(s3)))
+        Ok(Expr::unknown(ExprKind::Sym(s3)))
     );
 }
 
@@ -70,25 +70,25 @@ fn string() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr(r#""""#, &mut interner),
-        Ok(Expr::void(ExprKind::Str(String::from(""))))
+        Ok(Expr::unknown(ExprKind::Str(String::from(""))))
     );
     assert_eq!(
         parse_expr(r#""\"""#, &mut interner),
-        Ok(Expr::void(ExprKind::Str(String::from("\""))))
+        Ok(Expr::unknown(ExprKind::Str(String::from("\""))))
     );
     assert_eq!(
         parse_expr(r#""\\""#, &mut interner),
-        Ok(Expr::void(ExprKind::Str(String::from("\\"))))
+        Ok(Expr::unknown(ExprKind::Str(String::from("\\"))))
     );
     assert_eq!(
         parse_expr(r#""\0\a\b\t\v\f\n\r""#, &mut interner),
-        Ok(Expr::void(ExprKind::Str(String::from(
+        Ok(Expr::unknown(ExprKind::Str(String::from(
             "\0\x07\x08\t\x0B\x0C\n\r"
         ))))
     );
     assert_eq!(
         parse_expr(r#""\x00\x01\x02\x03\x04\x05""#, &mut interner),
-        Ok(Expr::void(ExprKind::Str(String::from(
+        Ok(Expr::unknown(ExprKind::Str(String::from(
             "\x00\x01\x02\x03\x04\x05"
         ))))
     );
@@ -112,28 +112,28 @@ fn integer() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0", &mut interner),
-        Ok(Expr::void(ExprKind::Int(0)))
+        Ok(Expr::unknown(ExprKind::Int(0)))
     );
     //assert_eq!(parse_expr("-0"), Ok(Expr::Integer(0)));
     assert_eq!(
         parse_expr("7", &mut interner),
-        Ok(Expr::void(ExprKind::Int(7)))
+        Ok(Expr::unknown(ExprKind::Int(7)))
     );
     //assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
     assert_eq!(
         parse_expr("123", &mut interner),
-        Ok(Expr::void(ExprKind::Int(123)))
+        Ok(Expr::unknown(ExprKind::Int(123)))
     );
     //assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
     assert_eq!(
         parse_expr("0o747", &mut interner),
-        Ok(Expr::void(ExprKind::Int(0o747)))
+        Ok(Expr::unknown(ExprKind::Int(0o747)))
     );
-    //assert_eq!(parse_expr("-002200"), Ok(Expr::void(Expr::Integer(-2200))));
+    //assert_eq!(parse_expr("-002200"), Ok(Expr::unknown(Expr::Integer(-2200))));
     /*
     assert_eq!(
         parse_expr("9223372036854775807"),
-        Ok(Expr::void(Expr::Integer(9223372036854775807)))
+        Ok(Expr::unknown(Expr::Integer(9223372036854775807)))
     );
     assert_eq!(
         parse_expr("9223372036854775808").unwrap_err().kind,
@@ -141,7 +141,7 @@ fn integer() {
     );
     assert_eq!(
         parse_expr("-9223372036854775808"),
-        Ok(Expr::void(Expr::Integer(-9223372036854775808)))
+        Ok(Expr::unknown(Expr::Integer(-9223372036854775808)))
     );
     assert_eq!(
         parse_expr("-9223372036854775809").unwrap_err().kind,
@@ -155,17 +155,17 @@ fn float() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0.0", &mut interner),
-        Ok(Expr::void(ExprKind::Float(0.0)))
+        Ok(Expr::unknown(ExprKind::Float(0.0)))
     );
     //assert_eq!(parse_expr("-0.0"), Ok(Expr::Float(0.0)));
     assert_eq!(
         parse_expr("1.0", &mut interner),
-        Ok(Expr::void(ExprKind::Float(1.0)))
+        Ok(Expr::unknown(ExprKind::Float(1.0)))
     );
     //assert_eq!(parse_expr("-1.0"), Ok(Expr::Float(-1.0)));
     assert_eq!(
         parse_expr("3.141592", &mut interner),
-        Ok(Expr::void(ExprKind::Float(3.141592)))
+        Ok(Expr::unknown(ExprKind::Float(3.141592)))
     );
     //assert_eq!(parse_expr("-2.7800000"), Ok(Expr::Float(-2.78)));
 }
@@ -179,35 +179,35 @@ fn tuple() {
     let age = interner.intern("age");
     assert_eq!(
         parse_expr("()", &mut interner),
-        Ok(Expr::void(ExprKind::Nil))
+        Ok(Expr::unknown(ExprKind::Nil))
     );
     assert_eq!(
         parse_expr("(1)", &mut interner),
-        Ok(Expr::void(ExprKind::Tuple(Tuple::from_iter([
-            TupleEntry::Pos(Expr::void(ExprKind::Int(1)))
+        Ok(Expr::unknown(ExprKind::Tuple(Tuple::from_iter([
+            TupleEntry::Pos(Expr::unknown(ExprKind::Int(1)))
         ]))))
     );
     assert_eq!(
         parse_expr("(1, 2, 3)", &mut interner),
-        Ok(Expr::void(ExprKind::Tuple(Tuple::from_iter([
-            TupleEntry::Pos(Expr::void(ExprKind::Int(1))),
-            TupleEntry::Pos(Expr::void(ExprKind::Int(2))),
-            TupleEntry::Pos(Expr::void(ExprKind::Int(3))),
+        Ok(Expr::unknown(ExprKind::Tuple(Tuple::from_iter([
+            TupleEntry::Pos(Expr::unknown(ExprKind::Int(1))),
+            TupleEntry::Pos(Expr::unknown(ExprKind::Int(2))),
+            TupleEntry::Pos(Expr::unknown(ExprKind::Int(3))),
         ]))))
     );
     assert_eq!(
         parse_expr("(x: 1, y: 2)", &mut interner),
-        Ok(Expr::void(ExprKind::Tuple(Tuple::from_iter([
-            TupleEntry::Named(x, Expr::void(ExprKind::Int(1))),
-            TupleEntry::Named(y, Expr::void(ExprKind::Int(2)))
+        Ok(Expr::unknown(ExprKind::Tuple(Tuple::from_iter([
+            TupleEntry::Named(x, Expr::unknown(ExprKind::Int(1))),
+            TupleEntry::Named(y, Expr::unknown(ExprKind::Int(2)))
         ]))))
     );
     assert_eq!(
         parse_expr(r#"("id", name: "Bob", age: 49)"#, &mut interner),
-        Ok(Expr::void(ExprKind::Tuple(Tuple::from_iter([
-            TupleEntry::Pos(Expr::void(ExprKind::Str(String::from("id")))),
-            TupleEntry::Named(name, Expr::void(ExprKind::Str(String::from("Bob")))),
-            TupleEntry::Named(age, Expr::void(ExprKind::Int(49)))
+        Ok(Expr::unknown(ExprKind::Tuple(Tuple::from_iter([
+            TupleEntry::Pos(Expr::unknown(ExprKind::Str(String::from("id")))),
+            TupleEntry::Named(name, Expr::unknown(ExprKind::Str(String::from("Bob")))),
+            TupleEntry::Named(age, Expr::unknown(ExprKind::Int(49)))
         ]))))
     );
 }
@@ -217,21 +217,21 @@ fn vector() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("[]", &mut interner),
-        Ok(Expr::void(ExprKind::List([].into())))
+        Ok(Expr::unknown(ExprKind::List([].into())))
     );
     assert_eq!(
         parse_expr("[1]", &mut interner),
-        Ok(Expr::void(ExprKind::List(
-            [Expr::void(ExprKind::Int(1))].into()
+        Ok(Expr::unknown(ExprKind::List(
+            [Expr::unknown(ExprKind::Int(1))].into()
         )))
     );
     assert_eq!(
         parse_expr("[1, 2, 3]", &mut interner),
-        Ok(Expr::void(ExprKind::List(
+        Ok(Expr::unknown(ExprKind::List(
             [
-                Expr::void(ExprKind::Int(1)),
-                Expr::void(ExprKind::Int(2)),
-                Expr::void(ExprKind::Int(3))
+                Expr::unknown(ExprKind::Int(1)),
+                Expr::unknown(ExprKind::Int(2)),
+                Expr::unknown(ExprKind::Int(3))
             ]
             .into()
         )))
@@ -243,54 +243,54 @@ fn precedence() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0 + 0", &mut interner),
-        Ok(Expr::void(ExprKind::BinOp(
+        Ok(Expr::unknown(ExprKind::BinOp(
             BinOp::Add,
-            Expr::void(ExprKind::Int(0)).into(),
-            Expr::void(ExprKind::Int(0)).into()
+            Expr::unknown(ExprKind::Int(0)).into(),
+            Expr::unknown(ExprKind::Int(0)).into()
         )))
     );
     assert_eq!(
         parse_expr("0 * 0", &mut interner),
-        Ok(Expr::void(ExprKind::BinOp(
+        Ok(Expr::unknown(ExprKind::BinOp(
             BinOp::Mul,
-            Expr::void(ExprKind::Int(0)).into(),
-            Expr::void(ExprKind::Int(0)).into()
+            Expr::unknown(ExprKind::Int(0)).into(),
+            Expr::unknown(ExprKind::Int(0)).into()
         )))
     );
     assert_eq!(
         parse_expr("0 + 0 * 0", &mut interner),
-        Ok(Expr::void(ExprKind::BinOp(
+        Ok(Expr::unknown(ExprKind::BinOp(
             BinOp::Add,
-            Expr::void(ExprKind::Int(0)).into(),
-            Expr::void(ExprKind::BinOp(
+            Expr::unknown(ExprKind::Int(0)).into(),
+            Expr::unknown(ExprKind::BinOp(
                 BinOp::Mul,
-                Expr::void(ExprKind::Int(0)).into(),
-                Expr::void(ExprKind::Int(0)).into()
+                Expr::unknown(ExprKind::Int(0)).into(),
+                Expr::unknown(ExprKind::Int(0)).into()
             ))
             .into()
         )))
     );
     assert_eq!(
         parse_expr("0 * 0 + 0 / 0 - 0", &mut interner),
-        Ok(Expr::void(ExprKind::BinOp(
+        Ok(Expr::unknown(ExprKind::BinOp(
             BinOp::Sub,
-            Expr::void(ExprKind::BinOp(
+            Expr::unknown(ExprKind::BinOp(
                 BinOp::Add,
-                Expr::void(ExprKind::BinOp(
+                Expr::unknown(ExprKind::BinOp(
                     BinOp::Mul,
-                    Expr::void(ExprKind::Int(0)).into(),
-                    Expr::void(ExprKind::Int(0)).into()
+                    Expr::unknown(ExprKind::Int(0)).into(),
+                    Expr::unknown(ExprKind::Int(0)).into()
                 ))
                 .into(),
-                Expr::void(ExprKind::BinOp(
+                Expr::unknown(ExprKind::BinOp(
                     BinOp::Div,
-                    Expr::void(ExprKind::Int(0)).into(),
-                    Expr::void(ExprKind::Int(0)).into()
+                    Expr::unknown(ExprKind::Int(0)).into(),
+                    Expr::unknown(ExprKind::Int(0)).into()
                 ))
                 .into(),
             ))
             .into(),
-            Expr::void(ExprKind::Int(0)).into(),
+            Expr::unknown(ExprKind::Int(0)).into(),
         )))
     );
     let f = interner.intern("f");
@@ -301,25 +301,25 @@ fn precedence() {
     let z = interner.intern("z");
     assert_eq!(
         parse_expr("f(x) * g(y) + h(z)", &mut interner),
-        Ok(Expr::void(ExprKind::BinOp(
+        Ok(Expr::unknown(ExprKind::BinOp(
             BinOp::Add,
-            Expr::void(ExprKind::BinOp(
+            Expr::unknown(ExprKind::BinOp(
                 BinOp::Mul,
-                Expr::void(ExprKind::Call(
-                    Expr::void(ExprKind::Ident(f)).into(),
-                    Tuple::from_iter([TupleEntry::Pos(Expr::void(ExprKind::Ident(x)))]),
+                Expr::unknown(ExprKind::Call(
+                    Expr::unknown(ExprKind::Ident(f)).into(),
+                    Tuple::from_iter([TupleEntry::Pos(Expr::unknown(ExprKind::Ident(x)))]),
                 ))
                 .into(),
-                Expr::void(ExprKind::Call(
-                    Expr::void(ExprKind::Ident(g)).into(),
-                    Tuple::from_iter([TupleEntry::Pos(Expr::void(ExprKind::Ident(y)))]),
+                Expr::unknown(ExprKind::Call(
+                    Expr::unknown(ExprKind::Ident(g)).into(),
+                    Tuple::from_iter([TupleEntry::Pos(Expr::unknown(ExprKind::Ident(y)))]),
                 ))
                 .into()
             ))
             .into(),
-            Expr::void(ExprKind::Call(
-                Expr::void(ExprKind::Ident(h)).into(),
-                Tuple::from_iter([TupleEntry::Pos(Expr::void(ExprKind::Ident(z)))]),
+            Expr::unknown(ExprKind::Call(
+                Expr::unknown(ExprKind::Ident(h)).into(),
+                Tuple::from_iter([TupleEntry::Pos(Expr::unknown(ExprKind::Ident(z)))]),
             ))
             .into()
         ))),
@@ -334,24 +334,24 @@ fn function() {
     let z = interner.intern("z");
     assert_eq!(
         parse_expr("|x| x", &mut interner),
-        Ok(Expr::void(ExprKind::Fn(
+        Ok(Expr::unknown(ExprKind::Fn(
             Tuple::from_iter([TupleEntry::Pos(Pat::Ident(x))]),
-            Expr::void(ExprKind::Ident(x)).into()
+            Expr::unknown(ExprKind::Ident(x)).into()
         )))
     );
     assert_eq!(
         parse_expr("|x, y, z| x(y, z)", &mut interner),
-        Ok(Expr::void(ExprKind::Fn(
+        Ok(Expr::unknown(ExprKind::Fn(
             Tuple::from_iter([
                 TupleEntry::Pos(Pat::Ident(x)),
                 TupleEntry::Pos(Pat::Ident(y)),
                 TupleEntry::Pos(Pat::Ident(z)),
             ]),
-            Expr::void(ExprKind::Call(
-                Expr::void(ExprKind::Ident(x)).into(),
+            Expr::unknown(ExprKind::Call(
+                Expr::unknown(ExprKind::Ident(x)).into(),
                 Tuple::from_iter([
-                    TupleEntry::Pos(Expr::void(ExprKind::Ident(y))),
-                    TupleEntry::Pos(Expr::void(ExprKind::Ident(z)))
+                    TupleEntry::Pos(Expr::unknown(ExprKind::Ident(y))),
+                    TupleEntry::Pos(Expr::unknown(ExprKind::Ident(z)))
                 ])
             ))
             .into()
@@ -366,22 +366,22 @@ fn block() {
     let y = interner.intern("y");
     assert_eq!(
         parse_expr("{}", &mut interner),
-        Ok(Expr::void(ExprKind::Void))
+        Ok(Expr::unknown(ExprKind::Void))
     );
     assert_eq!(
         parse_expr("{{{{{}}}}}", &mut interner),
-        Ok(Expr::void(ExprKind::Void))
+        Ok(Expr::unknown(ExprKind::Void))
     );
     assert_eq!(
         parse_expr("{ let x = 0, let y = 1, [x, y] }", &mut interner),
-        Ok(Expr::void(ExprKind::Block(
+        Ok(Expr::unknown(ExprKind::Block(
             [
-                Stmt::Let(Let(Pat::Ident(x), Expr::void(ExprKind::Int(0)))),
-                Stmt::Let(Let(Pat::Ident(y), Expr::void(ExprKind::Int(1)))),
-                Stmt::Expr(Expr::void(ExprKind::List(
+                Stmt::Let(Let(Pat::Ident(x), Expr::unknown(ExprKind::Int(0)))),
+                Stmt::Let(Let(Pat::Ident(y), Expr::unknown(ExprKind::Int(1)))),
+                Stmt::Expr(Expr::unknown(ExprKind::List(
                     [
-                        Expr::void(ExprKind::Ident(x)),
-                        Expr::void(ExprKind::Ident(y))
+                        Expr::unknown(ExprKind::Ident(x)),
+                        Expr::unknown(ExprKind::Ident(y))
                     ]
                     .into()
                 ))),
@@ -391,7 +391,7 @@ fn block() {
     );
     assert_eq!(
         parse_expr("{{1}}", &mut interner),
-        Ok(Expr::void(ExprKind::Int(1)))
+        Ok(Expr::unknown(ExprKind::Int(1)))
     );
 }
 
@@ -424,7 +424,7 @@ fn module() {
             .into(),
             definitions: [Stmt::Let(Let(
                 Pat::Ident(q),
-                Expr::void(ExprKind::Ident(w))
+                Expr::unknown(ExprKind::Ident(w))
             ))]
             .into(),
         })

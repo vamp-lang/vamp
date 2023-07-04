@@ -278,10 +278,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
             if self.accept(TokenKind::Colon).is_some() {
                 let expr = self
                     .expr()?
-                    .unwrap_or_else(|| Expr::void(ExprKind::Ident(identifier)));
+                    .unwrap_or_else(|| Expr::unknown(ExprKind::Ident(identifier)));
                 Ok(Some(TupleEntry::Named(identifier, expr)))
             } else {
-                Ok(Some(TupleEntry::Pos(Expr::void(ExprKind::Ident(
+                Ok(Some(TupleEntry::Pos(Expr::unknown(ExprKind::Ident(
                     identifier,
                 )))))
             }
@@ -397,7 +397,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
             if let Some(args) = args {
                 Ok(Some(Stmt::Let(Let(
                     pattern,
-                    Expr::void(ExprKind::Fn(args, expr.into())),
+                    Expr::unknown(ExprKind::Fn(args, expr.into())),
                 ))))
             } else {
                 Ok(Some(Stmt::Let(Let(pattern, expr.into()))))
@@ -431,11 +431,11 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 span: left_brace_span,
             })?;
             if statements.len() == 0 {
-                Ok(Some(Expr::void(ExprKind::Void)))
+                Ok(Some(Expr::unknown(ExprKind::Void)))
             } else if let [Stmt::Expr(expr)] = statements.as_ref() {
                 Ok(Some(expr.clone()))
             } else {
-                Ok(Some(Expr::void(ExprKind::Block(statements))))
+                Ok(Some(Expr::unknown(ExprKind::Block(statements))))
             }
         } else {
             Ok(None)
@@ -445,24 +445,24 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn atom(&mut self) -> Result<Option<Expr>> {
         if let Some(tuple) = self.tuple()? {
             if tuple.len() == 0 {
-                Ok(Some(Expr::void(ExprKind::Nil)))
+                Ok(Some(Expr::unknown(ExprKind::Nil)))
             } else {
-                Ok(Some(Expr::void(ExprKind::Tuple(tuple))))
+                Ok(Some(Expr::unknown(ExprKind::Tuple(tuple))))
             }
         } else if let Some(list) = self.list()? {
-            Ok(Some(Expr::void(ExprKind::List(list))))
+            Ok(Some(Expr::unknown(ExprKind::List(list))))
         } else if let Some(block) = self.block()? {
             Ok(Some(block))
         } else if let Some(identifier) = self.identifier() {
-            Ok(Some(Expr::void(ExprKind::Ident(identifier))))
+            Ok(Some(Expr::unknown(ExprKind::Ident(identifier))))
         } else if let Some(symbol) = self.symbol()? {
-            Ok(Some(Expr::void(ExprKind::Sym(symbol))))
+            Ok(Some(Expr::unknown(ExprKind::Sym(symbol))))
         } else if let Some(string) = self.string()? {
-            Ok(Some(Expr::void(ExprKind::Str(string))))
+            Ok(Some(Expr::unknown(ExprKind::Str(string))))
         } else if let Some(int) = self.int()? {
-            Ok(Some(Expr::void(ExprKind::Int(int))))
+            Ok(Some(Expr::unknown(ExprKind::Int(int))))
         } else if let Some(float) = self.float()? {
-            Ok(Some(Expr::void(ExprKind::Float(float))))
+            Ok(Some(Expr::unknown(ExprKind::Float(float))))
         } else {
             Ok(None)
         }
@@ -489,8 +489,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn function(&mut self) -> Result<Option<Expr>> {
         if let Some(args) = self.function_args()? {
-            let expr = self.expr()?.unwrap_or_else(|| Expr::void(ExprKind::Void));
-            Ok(Some(Expr::void(ExprKind::Fn(args, expr.into()))))
+            let expr = self
+                .expr()?
+                .unwrap_or_else(|| Expr::unknown(ExprKind::Void));
+            Ok(Some(Expr::unknown(ExprKind::Fn(args, expr.into()))))
         } else {
             Ok(None)
         }
@@ -500,14 +502,14 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         // Handle unary operators.
         let left = if let Some((unary_op, r_precedence)) = self.accept_unary_op() {
             if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                Some(Expr::void(ExprKind::UnOp(unary_op, right.into())))
+                Some(Expr::unknown(ExprKind::UnOp(unary_op, right.into())))
             } else {
                 return Err(self.invalid_token());
             }
         } else if let Some(mut left) = self.atom()? {
             // Handle function calls.
             while let Some(tuple) = self.tuple()? {
-                left = Expr::void(ExprKind::Call(left.into(), tuple));
+                left = Expr::unknown(ExprKind::Call(left.into(), tuple));
             }
             Some(left)
         } else {
@@ -523,7 +525,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                         break;
                     }
                     if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                        left = Expr::void(ExprKind::BinOp(binary_op, left.into(), right.into()));
+                        left = Expr::unknown(ExprKind::BinOp(binary_op, left.into(), right.into()));
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -642,19 +644,17 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 pub fn parse_expr(source: &str, interner: &mut Interner) -> Result<Expr> {
     let expr = Parser::new(source, tokenize(source)?, interner)
         .expr()?
-        .unwrap_or(Expr::void(ExprKind::Void));
+        .unwrap_or(Expr::unknown(ExprKind::Void));
     Ok(expr)
 }
 
 pub fn parse_statement(source: &str, interner: &mut Interner) -> Result<Stmt> {
     let statement = Parser::new(source, tokenize(source)?, interner)
         .statement()?
-        .unwrap_or(Stmt::Expr(Expr::void(ExprKind::Void)));
+        .unwrap_or(Stmt::Expr(Expr::unknown(ExprKind::Void)));
     Ok(statement)
 }
 
 pub fn parse_module(source: &str, interner: &mut Interner) -> Result<Mod> {
     Parser::new(source, tokenize(source)?, interner).module()
 }
-
-

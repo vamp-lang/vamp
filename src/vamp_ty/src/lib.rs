@@ -2,6 +2,8 @@ use vamp_tuple::Tuple;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Ty {
+    /// The unknown type.
+    Unknown,
     /// The 0-type. `Ty::Void` is uninhabited.
     Void,
     /// The 1-type. `Ty::Nil` is inhabited by the nil value only.
