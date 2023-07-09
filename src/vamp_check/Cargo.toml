@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 vamp_ty = { path = "../vamp_ty" }
 vamp_syntax = { path = "../vamp_syntax" }
+vamp_sym = { path = "../vamp_sym" }

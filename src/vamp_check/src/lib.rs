@@ -92,3 +92,58 @@ pub fn check_module(module: &mut Mod) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vamp_sym::Interner;
+    use vamp_syntax::parser::parse_expr;
+
+    #[test]
+    fn test_void() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("{}", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Void);
+    }
+
+    #[test]
+    fn test_nil() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("()", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Nil);
+    }
+
+    #[test]
+    fn test_symbol() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("'symbol'", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Sym);
+    }
+
+    #[test]
+    fn test_string() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("\"string\"", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Str);
+    }
+
+    #[test]
+    fn test_int() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("123", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Int);
+    }
+
+    #[test]
+    fn test_float() {
+        let mut interner = Interner::new();
+        let mut expr = parse_expr("3.14", &mut interner).unwrap();
+        check_expr(&mut expr).unwrap();
+        assert_eq!(expr.ty, Ty::Float);
+    }
+}
