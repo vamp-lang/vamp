@@ -43,10 +43,10 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Tuple<T> {
 /// Represents a combination of positional and named members.
 pub struct Tuple<T> {
     /// Sorted list of keys.
-    keys: Vec<Sym>,
+    pub(crate) keys: Vec<Sym>,
     /// Tuple data, represented as `keys.len() - `data.len()` positional items,
     /// followed by `keys.len()` named items corresponding to `keys`.
-    data: Vec<T>,
+    pub(crate) data: Vec<T>,
 }
 
 impl<T> Default for Tuple<T> {
@@ -135,6 +135,40 @@ impl<T> Tuple<T> {
                 None
             }
         }
+    }
+
+    pub fn iter(&self) -> Iter<T> {
+        Iter {
+            tuple: self,
+            index: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Iter<'a, T> {
+    tuple: &'a Tuple<T>,
+    index: usize,
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = TupleEntry<&'a T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.tuple.len() {
+            return None;
+        }
+        let named_offset = self.tuple.named_offset();
+        let entry = if self.index < named_offset {
+            TupleEntry::Pos(&self.tuple.data[self.index])
+        } else {
+            TupleEntry::Named(
+                self.tuple.keys[self.index - named_offset],
+                &self.tuple.data[self.index],
+            )
+        };
+        self.index += 1;
+        Some(entry)
     }
 }
 

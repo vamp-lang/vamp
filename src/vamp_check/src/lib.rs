@@ -10,10 +10,6 @@ pub fn check_expr(expr: &mut Expr) -> Result<()> {
             expr.ty = Ty::Void;
             Ok(())
         }
-        ExprKind::Nil => {
-            expr.ty = Ty::Nil;
-            Ok(())
-        }
         ExprKind::Sym(..) => {
             expr.ty = Ty::Sym;
             Ok(())
@@ -105,14 +101,6 @@ mod tests {
         let mut expr = parse_expr("{}", &mut interner).unwrap();
         check_expr(&mut expr).unwrap();
         assert_eq!(expr.ty, Ty::Void);
-    }
-
-    #[test]
-    fn test_nil() {
-        let mut interner = Interner::new();
-        let mut expr = parse_expr("()", &mut interner).unwrap();
-        check_expr(&mut expr).unwrap();
-        assert_eq!(expr.ty, Ty::Nil);
     }
 
     #[test]

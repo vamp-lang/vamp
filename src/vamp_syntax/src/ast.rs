@@ -4,7 +4,6 @@ use vamp_ty::Ty;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Pat {
-    Nil,
     Tuple(Tuple<Pat>),
     List(Box<[Pat]>),
     Ident(Sym),
@@ -97,9 +96,7 @@ pub enum ExprKind {
     Void,
     /// A nonempty sequence of statements `{...}`.
     Block(Box<[Stmt]>),
-    /// An empty tuple `()`.
-    Nil,
-    /// A nonempty tuple `(...)`.
+    /// A tuple `(...)`.
     Tuple(Tuple<Expr>),
     /// A list literal `[...]`.
     List(Box<[Expr]>),

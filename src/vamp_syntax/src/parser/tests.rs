@@ -179,7 +179,7 @@ fn tuple() {
     let age = interner.intern("age");
     assert_eq!(
         parse_expr("()", &mut interner),
-        Ok(Expr::unknown(ExprKind::Nil))
+        Ok(Expr::unknown(ExprKind::Tuple(Tuple::new())))
     );
     assert_eq!(
         parse_expr("(1)", &mut interner),

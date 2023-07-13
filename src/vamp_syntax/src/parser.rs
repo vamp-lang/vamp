@@ -375,11 +375,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn pattern(&mut self) -> Option<Pat> {
         if let Some(members) = self.pattern_tuple() {
-            if members.len() == 0 {
-                Some(Pat::Nil)
-            } else {
-                Some(Pat::Tuple(members))
-            }
+            Some(Pat::Tuple(members))
         } else if let Some(identifier) = self.identifier() {
             Some(Pat::Ident(identifier))
         } else {
@@ -444,11 +440,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn atom(&mut self) -> Result<Option<Expr>> {
         if let Some(tuple) = self.tuple()? {
-            if tuple.len() == 0 {
-                Ok(Some(Expr::unknown(ExprKind::Nil)))
-            } else {
-                Ok(Some(Expr::unknown(ExprKind::Tuple(tuple))))
-            }
+            Ok(Some(Expr::unknown(ExprKind::Tuple(tuple))))
         } else if let Some(list) = self.list()? {
             Ok(Some(Expr::unknown(ExprKind::List(list))))
         } else if let Some(block) = self.block()? {

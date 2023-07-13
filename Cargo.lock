@@ -77,6 +77,15 @@ name = "vamp_codegen_wasm"
 version = "0.1.0"
 
 [[package]]
+name = "vamp_eval"
+version = "0.1.0"
+dependencies = [
+ "vamp_sym",
+ "vamp_syntax",
+ "vamp_tuple",
+]
+
+[[package]]
 name = "vamp_sym"
 version = "0.1.0"
 dependencies = [
