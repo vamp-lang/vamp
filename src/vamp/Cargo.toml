@@ -1,0 +1,10 @@
+[package]
+name = "vamp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vamp_syntax = { path = "../vamp_syntax" }
+vamp_sym = { path = "../vamp_sym" }
+vamp_eval = { path = "../vamp_eval" }
+rustyline = "12.0.0"
