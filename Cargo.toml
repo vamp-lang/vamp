@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "src/vamp",
   "src/vamp_codegen_wasm",
   "src/vamp_sym",
   "src/vamp_syntax",

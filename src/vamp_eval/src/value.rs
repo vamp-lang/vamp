@@ -4,6 +4,7 @@ use vamp_tuple::Tuple;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
+    Bool(bool),
     Sym(Sym),
     Str(String),
     Int(i64),
