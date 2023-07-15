@@ -66,6 +66,22 @@ impl<T: PartialEq> PartialEq for Tuple<T> {
 
 impl<T: Eq> Eq for Tuple<T> {}
 
+pub trait TupleIndex<T> {
+    fn index(self, tuple: &Tuple<T>) -> Option<&T>;
+}
+
+impl<T> TupleIndex<T> for usize {
+    fn index(self, tuple: &Tuple<T>) -> Option<&T> {
+        tuple.data.get(self)
+    }
+}
+
+impl<T> TupleIndex<T> for Sym {
+    fn index(self, tuple: &Tuple<T>) -> Option<&T> {
+        tuple.data.get(tuple.key_position(self)?)
+    }
+}
+
 impl<T> std::ops::Index<usize> for Tuple<T> {
     type Output = T;
 
@@ -119,6 +135,10 @@ impl<T> Tuple<T> {
             .binary_search(&key)
             .ok()
             .map(|i| self.named_offset() + i)
+    }
+
+    pub fn get<Idx: TupleIndex<T>>(&self, i: Idx) -> Option<&T> {
+        i.index(&self)
     }
 
     pub fn push(&mut self, value: T) {

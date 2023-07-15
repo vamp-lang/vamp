@@ -2,7 +2,7 @@ use vamp_sym::Sym;
 use vamp_syntax::ast::{Expr, Pat};
 use vamp_tuple::Tuple;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Sym(Sym),
     Str(String),

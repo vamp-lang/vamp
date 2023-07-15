@@ -1,6 +1,7 @@
 pub mod error;
 pub mod value;
 pub use error::{Error, Result};
+use std::convert::TryInto;
 pub use value::Value;
 use vamp_syntax::ast::{BinOp, Expr, ExprKind, UnOp};
 use vamp_tuple::{Tuple, TupleEntry};
@@ -40,13 +41,59 @@ pub fn eval(expr: &Expr) -> Result<Value> {
             UnOp::Neg => match eval(expr)? {
                 Value::Int(value) => Ok(Value::Int(-value)),
                 Value::Float(value) => Ok(Value::Float(-value)),
-                _ => return Err(Error::Types),
+                _ => Err(Error::Types),
             },
             UnOp::BitNot => match eval(expr)? {
                 Value::Int(value) => Ok(Value::Int(!value)),
-                _ => return Err(Error::Types),
+                _ => Err(Error::Types),
             },
             _ => todo!(),
+        },
+        ExprKind::BinOp(binary_op, l, r) => match binary_op {
+            BinOp::Dot => match (eval(l)?, &r.kind) {
+                (Value::Tuple(tuple), ExprKind::Ident(key)) => tuple
+                    .get(*key)
+                    .map(|value| value.clone())
+                    .ok_or(Error::KeyNotFound),
+                (Value::Tuple(tuple), ExprKind::Int(i)) => {
+                    let i: usize = (*i).try_into().map_err(|_| Error::KeyNotFound)?;
+                    tuple
+                        .get(i)
+                        .map(|value| value.clone())
+                        .ok_or(Error::KeyNotFound)
+                }
+                _ => Err(Error::Types),
+            },
+            BinOp::Add => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+                _ => Err(Error::Types),
+            },
+            BinOp::Sub => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
+                _ => Err(Error::Types),
+            },
+            BinOp::Mul => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
+                _ => Err(Error::Types),
+            },
+            BinOp::Div => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a / b)),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a / b)),
+                _ => Err(Error::Types),
+            },
+            BinOp::Mod => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
+                _ => Err(Error::Types),
+            },
+            BinOp::Exp => match (eval(l)?, eval(r)?) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a.pow(b.try_into().unwrap()))),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.powf(b))),
+                _ => Err(Error::Types),
+            },
+            _ => Err(Error::Types),
         },
         _ => todo!(),
     }
