@@ -13,14 +13,11 @@ pub enum Pat {
     Float(f64),
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Let(pub Pat, pub Expr);
-
 /// A block statement.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
     /// A let binding `let y = f(x)`.
-    Let(Let),
+    Let(Pat, Expr),
     /// An unbound expression `f(x)`.
     Expr(Expr),
 }
@@ -114,6 +111,8 @@ pub enum ExprKind {
     Int(i64),
     /// A floating point literal `1.2`.
     Float(f64),
+    /// A boolean literal `true`.
+    Bool(bool),
     /// A unary operator applied to a single operand expression.
     UnOp(UnOp, Box<Expr>),
     /// A binary operator applied to two operand expressions.
@@ -157,7 +156,7 @@ pub struct Dep {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Mod {
     /// A module's dependencies.
-    pub dependencies: Box<[Dep]>,
+    pub deps: Box<[Dep]>,
     /// A module's definitions.
-    pub definitions: Box<[Stmt]>,
+    pub defs: Box<[Stmt]>,
 }

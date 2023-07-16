@@ -101,6 +101,9 @@ fn valid_tokens() {
         (TokenKind::Float, "1e10"),
         (TokenKind::Float, "2.5e2"),
         (TokenKind::Float, "1e-10"),
+        // Boolean literals
+        (TokenKind::True, "true"),
+        (TokenKind::False, "false"),
     ];
     for (kind, slice) in cases {
         assert_eq!(token_slices(slice), Ok(vec![(kind, slice)]));

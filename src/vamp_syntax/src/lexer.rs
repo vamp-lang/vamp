@@ -59,6 +59,8 @@ pub enum TokenKind {
     Str,
     Int,
     Float,
+    True,
+    False,
 }
 
 #[derive(Debug, PartialEq)]
@@ -253,6 +255,8 @@ impl<'a> Tokens<'a> {
                 "if" => TokenKind::If,
                 "else" => TokenKind::Else,
                 "for" => TokenKind::For,
+                "true" => TokenKind::True,
+                "false" => TokenKind::False,
                 _ => TokenKind::Ident,
             })
         } else {

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn identifiers() {
+fn test_idents() {
     let mut interner = Interner::new();
     let x = interner.intern("x");
     let y2 = interner.intern("y2");
@@ -46,7 +46,7 @@ fn identifiers() {
 }
 
 #[test]
-fn symbol() {
+fn test_syms() {
     let mut interner = Interner::new();
     let s1 = interner.intern("");
     let s2 = interner.intern(r#"\"#);
@@ -66,7 +66,7 @@ fn symbol() {
 }
 
 #[test]
-fn string() {
+fn test_strs() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr(r#""""#, &mut interner),
@@ -95,7 +95,7 @@ fn string() {
 }
 
 #[test]
-fn string_invalid_escape_sequence() {
+fn test_str_esc_seq_invalid() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr(r#""\z""#, &mut interner).unwrap_err().kind,
@@ -108,70 +108,68 @@ fn string_invalid_escape_sequence() {
 }
 
 #[test]
-fn integer() {
+fn test_ints() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0", &mut interner),
         Ok(Expr::unknown(ExprKind::Int(0)))
     );
-    //assert_eq!(parse_expr("-0"), Ok(Expr::Integer(0)));
     assert_eq!(
         parse_expr("7", &mut interner),
         Ok(Expr::unknown(ExprKind::Int(7)))
     );
-    //assert_eq!(parse_expr("-3"), Ok(Expr::Integer(-3)));
     assert_eq!(
         parse_expr("123", &mut interner),
         Ok(Expr::unknown(ExprKind::Int(123)))
     );
-    //assert_eq!(parse_expr("-313"), Ok(Expr::Integer(-313)));
     assert_eq!(
         parse_expr("0o747", &mut interner),
         Ok(Expr::unknown(ExprKind::Int(0o747)))
     );
-    //assert_eq!(parse_expr("-002200"), Ok(Expr::unknown(Expr::Integer(-2200))));
-    /*
     assert_eq!(
-        parse_expr("9223372036854775807"),
-        Ok(Expr::unknown(Expr::Integer(9223372036854775807)))
+        parse_expr("9223372036854775807", &mut interner),
+        Ok(Expr::unknown(ExprKind::Int(9223372036854775807)))
     );
     assert_eq!(
-        parse_expr("9223372036854775808").unwrap_err().kind,
-        ErrorKind::InvalidInteger
+        parse_expr("9223372036854775808", &mut interner)
+            .unwrap_err()
+            .kind,
+        ErrorKind::IntInvalid
     );
-    assert_eq!(
-        parse_expr("-9223372036854775808"),
-        Ok(Expr::unknown(Expr::Integer(-9223372036854775808)))
-    );
-    assert_eq!(
-        parse_expr("-9223372036854775809").unwrap_err().kind,
-        ErrorKind::InvalidInteger
-    );
-    */
 }
 
 #[test]
-fn float() {
+fn test_floats() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0.0", &mut interner),
         Ok(Expr::unknown(ExprKind::Float(0.0)))
     );
-    //assert_eq!(parse_expr("-0.0"), Ok(Expr::Float(0.0)));
     assert_eq!(
         parse_expr("1.0", &mut interner),
         Ok(Expr::unknown(ExprKind::Float(1.0)))
     );
-    //assert_eq!(parse_expr("-1.0"), Ok(Expr::Float(-1.0)));
     assert_eq!(
         parse_expr("3.141592", &mut interner),
         Ok(Expr::unknown(ExprKind::Float(3.141592)))
     );
-    //assert_eq!(parse_expr("-2.7800000"), Ok(Expr::Float(-2.78)));
 }
 
 #[test]
-fn tuple() {
+fn test_bools() {
+    let mut interner = Interner::new();
+    assert_eq!(
+        parse_expr("true", &mut interner),
+        Ok(Expr::unknown(ExprKind::Bool(true)))
+    );
+    assert_eq!(
+        parse_expr("false", &mut interner),
+        Ok(Expr::unknown(ExprKind::Bool(false)))
+    );
+}
+
+#[test]
+fn test_tuples() {
     let mut interner = Interner::new();
     let x = interner.intern("x");
     let y = interner.intern("y");
@@ -213,7 +211,7 @@ fn tuple() {
 }
 
 #[test]
-fn vector() {
+fn test_lists() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("[]", &mut interner),
@@ -239,7 +237,7 @@ fn vector() {
 }
 
 #[test]
-fn precedence() {
+fn test_prec() {
     let mut interner = Interner::new();
     assert_eq!(
         parse_expr("0 + 0", &mut interner),
@@ -327,7 +325,7 @@ fn precedence() {
 }
 
 #[test]
-fn function() {
+fn test_functions() {
     let mut interner = Interner::new();
     let x = interner.intern("x");
     let y = interner.intern("y");
@@ -360,7 +358,7 @@ fn function() {
 }
 
 #[test]
-fn block() {
+fn test_blocks() {
     let mut interner = Interner::new();
     let x = interner.intern("x");
     let y = interner.intern("y");
@@ -376,8 +374,8 @@ fn block() {
         parse_expr("{ let x = 0, let y = 1, [x, y] }", &mut interner),
         Ok(Expr::unknown(ExprKind::Block(
             [
-                Stmt::Let(Let(Pat::Ident(x), Expr::unknown(ExprKind::Int(0)))),
-                Stmt::Let(Let(Pat::Ident(y), Expr::unknown(ExprKind::Int(1)))),
+                Stmt::Let(Pat::Ident(x), Expr::unknown(ExprKind::Int(0))),
+                Stmt::Let(Pat::Ident(y), Expr::unknown(ExprKind::Int(1))),
                 Stmt::Expr(Expr::unknown(ExprKind::List(
                     [
                         Expr::unknown(ExprKind::Ident(x)),
@@ -396,7 +394,7 @@ fn block() {
 }
 
 #[test]
-fn module() {
+fn test_modules() {
     let mut interner = Interner::new();
     let x = interner.intern("x");
     let y = interner.intern("y");
@@ -414,7 +412,7 @@ fn module() {
             &mut interner
         ),
         Ok(Mod {
-            dependencies: [Dep {
+            deps: [Dep {
                 path: ModPath {
                     local: false,
                     segments: [x, y, z].into(),
@@ -422,11 +420,7 @@ fn module() {
                 bindings: [(w, w)].into(),
             }]
             .into(),
-            definitions: [Stmt::Let(Let(
-                Pat::Ident(q),
-                Expr::unknown(ExprKind::Ident(w))
-            ))]
-            .into(),
+            defs: [Stmt::Let(Pat::Ident(q), Expr::unknown(ExprKind::Ident(w)))].into(),
         })
     );
 }

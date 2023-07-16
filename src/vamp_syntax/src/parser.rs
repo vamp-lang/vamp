@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, Dep, Expr, ExprKind, Let, Mod, ModPath, Pat, Stmt, UnOp},
+    ast::{BinOp, Dep, Expr, ExprKind, ModPath, Mod, Pat, Stmt, UnOp},
     error::{Error, ErrorKind, Result},
     lexer::{tokenize, Token, TokenKind},
     span::Span,
@@ -41,12 +41,12 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         self.accept(kind).map(|span| &self.source[span])
     }
 
-    fn accept_symbol(&mut self, kind: TokenKind) -> Option<Sym> {
+    fn accept_sym(&mut self, kind: TokenKind) -> Option<Sym> {
         self.accept_slice(kind)
             .map(|slice| self.interner.intern(slice.into()))
     }
 
-    fn accept_unary_op(&mut self) -> Option<(UnOp, u8)> {
+    fn accept_un_op(&mut self) -> Option<(UnOp, u8)> {
         if self.index < self.tokens.len() {
             let result = match self.tokens[self.index].kind {
                 TokenKind::Minus => (UnOp::Neg, 20),
@@ -61,7 +61,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn accept_binary_op(&mut self) -> Option<(BinOp, u8, u8)> {
+    fn accept_bin_op(&mut self) -> Option<(BinOp, u8, u8)> {
         if self.index < self.tokens.len() {
             let result = match self.tokens[self.index].kind {
                 TokenKind::OrOr => (BinOp::Or, 0, 1),
@@ -106,7 +106,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 
     fn identifier(&mut self) -> Option<Sym> {
-        self.accept_symbol(TokenKind::Ident)
+        self.accept_sym(TokenKind::Ident)
     }
 
     fn unescape(&mut self, span: Span) -> Result<String> {
@@ -273,6 +273,16 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
+    fn bool(&mut self) -> Result<Option<bool>> {
+        if self.accept(TokenKind::True).is_some() {
+            Ok(Some(true))
+        } else if self.accept(TokenKind::False).is_some() {
+            Ok(Some(false))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn tuple_entry(&mut self) -> Result<Option<TupleEntry<Expr>>> {
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
@@ -383,7 +393,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn statement(&mut self) -> Result<Option<Stmt>> {
+    fn stmt(&mut self) -> Result<Option<Stmt>> {
         if self.accept(TokenKind::Let).is_some() {
             let pattern = self.pattern().ok_or_else(|| self.invalid_token())?;
             let args = self.pattern_tuple();
@@ -391,12 +401,12 @@ impl<'src, 'sym> Parser<'src, 'sym> {
                 .ok_or_else(|| self.invalid_token())?;
             let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
             if let Some(args) = args {
-                Ok(Some(Stmt::Let(Let(
+                Ok(Some(Stmt::Let(
                     pattern,
                     Expr::unknown(ExprKind::Fn(args, expr.into())),
-                ))))
+                )))
             } else {
-                Ok(Some(Stmt::Let(Let(pattern, expr.into()))))
+                Ok(Some(Stmt::Let(pattern, expr.into())))
             }
         } else if let Some(expr) = self.expr()? {
             Ok(Some(Stmt::Expr(expr)))
@@ -405,12 +415,12 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn statements(&mut self) -> Result<Box<[Stmt]>> {
+    fn stmts(&mut self) -> Result<Box<[Stmt]>> {
         let mut statements = vec![];
-        if let Some(statement) = self.statement()? {
+        if let Some(statement) = self.stmt()? {
             statements.push(statement);
             while self.accept(TokenKind::Comma).is_some() {
-                if let Some(statement) = self.statement()? {
+                if let Some(statement) = self.stmt()? {
                     statements.push(statement);
                 }
             }
@@ -420,7 +430,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn block(&mut self) -> Result<Option<Expr>> {
         if let Some(left_brace_span) = self.accept(TokenKind::LBrace) {
-            let statements = self.statements()?;
+            let statements = self.stmts()?;
             self.accept(TokenKind::RBrace).ok_or_else(|| Error {
                 kind: ErrorKind::Delimiters,
                 detail: None,
@@ -455,6 +465,8 @@ impl<'src, 'sym> Parser<'src, 'sym> {
             Ok(Some(Expr::unknown(ExprKind::Int(int))))
         } else if let Some(float) = self.float()? {
             Ok(Some(Expr::unknown(ExprKind::Float(float))))
+        } else if let Some(bool) = self.bool()? {
+            Ok(Some(Expr::unknown(ExprKind::Bool(bool))))
         } else {
             Ok(None)
         }
@@ -490,11 +502,11 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn expr_with_precedence(&mut self, min_precedence: u8) -> Result<Option<Expr>> {
+    fn expr_with_precedence(&mut self, min_prec: u8) -> Result<Option<Expr>> {
         // Handle unary operators.
-        let left = if let Some((unary_op, r_precedence)) = self.accept_unary_op() {
-            if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                Some(Expr::unknown(ExprKind::UnOp(unary_op, right.into())))
+        let left = if let Some((un_op, r_prec)) = self.accept_un_op() {
+            if let Some(right) = self.expr_with_precedence(r_prec)? {
+                Some(Expr::unknown(ExprKind::UnOp(un_op, right.into())))
             } else {
                 return Err(self.invalid_token());
             }
@@ -511,13 +523,13 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         // Handle binary operators.
         if let Some(mut left) = left {
             loop {
-                if let Some((binary_op, l_precedence, r_precedence)) = self.accept_binary_op() {
-                    if l_precedence < min_precedence {
+                if let Some((bin_op, l_prec, r_prec)) = self.accept_bin_op() {
+                    if l_prec < min_prec {
                         self.index -= 1;
                         break;
                     }
-                    if let Some(right) = self.expr_with_precedence(r_precedence)? {
-                        left = Expr::unknown(ExprKind::BinOp(binary_op, left.into(), right.into()));
+                    if let Some(right) = self.expr_with_precedence(r_prec)? {
+                        left = Expr::unknown(ExprKind::BinOp(bin_op, left.into(), right.into()));
                     } else {
                         return Err(self.invalid_token());
                     }
@@ -545,10 +557,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn module_path(&mut self) -> Result<Option<ModPath>> {
         let i = self.index;
         let local = self.accept(TokenKind::Period).is_some();
-        if let Some(segment) = self.accept_symbol(TokenKind::Ident) {
+        if let Some(segment) = self.accept_sym(TokenKind::Ident) {
             let mut segments = vec![segment];
             while self.accept(TokenKind::Period).is_some() {
-                if let Some(segment) = self.accept_symbol(TokenKind::Ident) {
+                if let Some(segment) = self.accept_sym(TokenKind::Ident) {
                     segments.push(segment);
                 } else {
                     break;
@@ -567,11 +579,11 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn bindings(&mut self) -> Result<Option<Box<[(Sym, Sym)]>>> {
         if self.accept(TokenKind::LParen).is_some() {
             let mut bindings = vec![];
-            if let Some(binding) = self.accept_symbol(TokenKind::Ident) {
+            if let Some(binding) = self.accept_sym(TokenKind::Ident) {
                 // TODO: Allow renames.
                 bindings.push((binding, binding));
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(binding) = self.accept_symbol(TokenKind::Ident) {
+                    if let Some(binding) = self.accept_sym(TokenKind::Ident) {
                         bindings.push((binding, binding));
                     }
                 }
@@ -584,7 +596,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn dependency(&mut self) -> Result<Option<Dep>> {
+    fn dep(&mut self) -> Result<Option<Dep>> {
         if let Some(path) = self.module_path()? {
             let bindings = self.bindings()?.ok_or_else(|| self.invalid_token())?;
             Ok(Some(Dep { path, bindings }))
@@ -593,43 +605,40 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn dependencies(&mut self) -> Result<Box<[Dep]>> {
-        let mut dependencies = vec![];
+    fn deps(&mut self) -> Result<Box<[Dep]>> {
+        let mut deps = vec![];
         if self.accept(TokenKind::Use).is_some() {
             self.accept(TokenKind::LBrace)
                 .ok_or_else(|| self.invalid_token())?;
-            if let Some(dependency) = self.dependency()? {
-                dependencies.push(dependency);
+            if let Some(dep) = self.dep()? {
+                deps.push(dep);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(dependency) = self.dependency()? {
-                        dependencies.push(dependency);
+                    if let Some(dep) = self.dep()? {
+                        deps.push(dep);
                     }
                 }
             }
             self.accept(TokenKind::RBrace)
                 .ok_or_else(|| self.invalid_token())?;
         }
-        Ok(dependencies.into())
+        Ok(deps.into())
     }
 
-    fn definitions(&mut self) -> Result<Box<[Stmt]>> {
-        let definitions = self.statements()?;
-        for definition in definitions.iter() {
+    fn defs(&mut self) -> Result<Box<[Stmt]>> {
+        let def = self.stmts()?;
+        for definition in def.iter() {
             if let Stmt::Expr(_) = definition {
                 return Err(self.invalid_token());
             }
         }
-        Ok(definitions.into())
+        Ok(def.into())
     }
 
     fn module(&mut self) -> Result<Mod> {
-        let dependencies = self.dependencies()?;
+        let deps = self.deps()?;
         self.accept(TokenKind::Comma);
-        let definitions = self.definitions()?;
-        Ok(Mod {
-            dependencies,
-            definitions,
-        })
+        let defs = self.defs()?;
+        Ok(Mod { deps, defs })
     }
 }
 
@@ -640,11 +649,11 @@ pub fn parse_expr(source: &str, interner: &mut Interner) -> Result<Expr> {
     Ok(expr)
 }
 
-pub fn parse_statement(source: &str, interner: &mut Interner) -> Result<Stmt> {
-    let statement = Parser::new(source, tokenize(source)?, interner)
-        .statement()?
+pub fn parse_stmt(source: &str, interner: &mut Interner) -> Result<Stmt> {
+    let stmt = Parser::new(source, tokenize(source)?, interner)
+        .stmt()?
         .unwrap_or(Stmt::Expr(Expr::unknown(ExprKind::Void)));
-    Ok(statement)
+    Ok(stmt)
 }
 
 pub fn parse_module(source: &str, interner: &mut Interner) -> Result<Mod> {

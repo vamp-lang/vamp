@@ -1,7 +1,7 @@
 pub mod error;
 
 use error::{Error, Result};
-use vamp_syntax::ast::{BinOp, Expr, ExprKind, Let, Mod, Stmt};
+use vamp_syntax::ast::{BinOp, Expr, ExprKind, Mod, Stmt};
 use vamp_ty::Ty;
 
 pub fn check_expr(expr: &mut Expr) -> Result<()> {
@@ -71,7 +71,7 @@ pub fn check_expr(expr: &mut Expr) -> Result<()> {
 
 pub fn check_statement(statement: &mut Stmt) -> Result<()> {
     match statement {
-        Stmt::Let(Let(_, expr)) => {
+        Stmt::Let(_, expr) => {
             check_expr(expr)?;
             Ok(())
         }
@@ -83,7 +83,7 @@ pub fn check_statement(statement: &mut Stmt) -> Result<()> {
 }
 
 pub fn check_module(module: &mut Mod) -> Result<()> {
-    for statement in module.definitions.iter_mut() {
+    for statement in module.defs.iter_mut() {
         check_statement(statement)?;
     }
     Ok(())
