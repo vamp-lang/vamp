@@ -11,6 +11,8 @@ pub enum Pat {
     Str(String),
     Int(i64),
     Float(f64),
+    Bool(bool),
+    Wild,
 }
 
 /// A block statement.

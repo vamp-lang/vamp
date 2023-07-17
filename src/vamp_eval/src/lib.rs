@@ -21,8 +21,63 @@ impl<'a> Scope<'a> {
         }
     }
 
-    fn bind(&mut self, name: Sym, value: Value) {
-        self.bindings.insert(name, value);
+    fn bind_tuple(&mut self, pat: &Tuple<Pat>, value: Tuple<Value>) -> Result<()> {
+        let mut i = 0usize;
+        for entry in pat.iter() {
+            match entry {
+                TupleEntry::Pos(pat) => {
+                    let value = value.get(i).ok_or(Error::Mismatch)?;
+                    self.bind(pat, value.clone())?;
+                    i += 1;
+                }
+                TupleEntry::Named(key, pat) => {
+                    let value = value.get(key).ok_or(Error::Mismatch)?;
+                    self.bind(pat, value.clone())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn bind(&mut self, pat: &Pat, value: Value) -> Result<()> {
+        match pat {
+            Pat::Ident(sym) => {
+                self.bindings.insert(*sym, value);
+                Ok(())
+            }
+            Pat::Sym(sym) => match value {
+                Value::Sym(value) if &value == sym => Ok(()),
+                _ => Err(Error::Mismatch),
+            },
+            Pat::Str(str) => match value {
+                Value::Str(value) if &value == str => Ok(()),
+                _ => Err(Error::Mismatch),
+            },
+            Pat::Int(x) => match value {
+                Value::Int(value) if &value == x => Ok(()),
+                _ => Err(Error::Mismatch),
+            },
+            Pat::Float(x) => match value {
+                Value::Float(value) if &value == x => Ok(()),
+                _ => Err(Error::Mismatch),
+            },
+            Pat::Bool(x) => match value {
+                Value::Bool(value) if &value == x => Ok(()),
+                _ => Err(Error::Mismatch),
+            },
+            Pat::Tuple(tuple) => match value {
+                Value::Tuple(value) => self.bind_tuple(tuple, value),
+                _ => Err(Error::Mismatch),
+            },
+            /*
+            Pat::List(items) => {
+                for item in items.into_iter() {
+                    self.bind(item, value);
+                }
+            }*/
+            Pat::Wild => Ok(()),
+            _ => todo!(),
+        }
     }
 
     fn lookup(&self, name: Sym) -> Result<Value> {
@@ -193,18 +248,35 @@ pub fn eval_expr(expr: &Expr, scope: &Scope) -> Result<Value> {
             }
             Err(Error::Void)
         }
-        _ => todo!(),
+        ExprKind::Fn(args, expr) => Ok(Value::Fn(args.clone(), expr.clone())),
+        ExprKind::Call(f, args) => match eval_expr(f, scope)? {
+            Value::Fn(params, body) => {
+                let mut call_scope = Scope::default();
+                let mut evaluated_args = Tuple::new();
+                for arg in args.iter() {
+                    match arg {
+                        TupleEntry::Pos(expr) => {
+                            let value = eval_expr(expr, scope)?;
+                            evaluated_args.push(value);
+                        }
+                        TupleEntry::Named(key, expr) => {
+                            let value = eval_expr(expr, scope)?;
+                            evaluated_args.insert(key, value);
+                        }
+                    }
+                }
+                call_scope.bind_tuple(&params, evaluated_args)?;
+                eval_expr(&body, &call_scope)
+            }
+            _ => Err(Error::Types),
+        },
     }
 }
 
 pub fn eval_stmt(stmt: &Stmt, scope: &mut Scope) -> Result<Option<Value>> {
     match stmt {
         Stmt::Let(pat, expr) => {
-            if let Pat::Ident(sym) = pat {
-                scope.bind(*sym, eval_expr(expr, &scope)?)
-            } else {
-                todo!()
-            }
+            scope.bind(pat, eval_expr(expr, scope)?)?;
             Ok(None)
         }
         Stmt::Expr(expr) => Ok(Some(eval_expr(expr, &scope)?)),

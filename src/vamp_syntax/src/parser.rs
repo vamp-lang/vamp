@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinOp, Dep, Expr, ExprKind, ModPath, Mod, Pat, Stmt, UnOp},
+    ast::{BinOp, Dep, Expr, ExprKind, Mod, ModPath, Pat, Stmt, UnOp},
     error::{Error, ErrorKind, Result},
     lexer::{tokenize, Token, TokenKind},
     span::Span,
@@ -348,29 +348,29 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn pattern_tuple_entry(&mut self) -> Option<TupleEntry<Pat>> {
+    fn pat_tuple_entry(&mut self) -> Option<TupleEntry<Pat>> {
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
-                let pattern = self.pattern().unwrap_or_else(|| Pat::Ident(identifier));
+                let pattern = self.pat().unwrap_or_else(|| Pat::Ident(identifier));
                 Some(TupleEntry::Named(identifier, pattern))
             } else {
                 Some(TupleEntry::Pos(Pat::Ident(identifier)))
             }
-        } else if let Some(pattern) = self.pattern() {
+        } else if let Some(pattern) = self.pat() {
             Some(TupleEntry::Pos(pattern))
         } else {
             None
         }
     }
 
-    fn pattern_tuple(&mut self) -> Option<Tuple<Pat>> {
+    fn pat_tuple(&mut self) -> Option<Tuple<Pat>> {
         let i = self.index;
         if self.accept(TokenKind::LParen).is_some() {
             let mut entries = vec![];
-            if let Some(entry) = self.pattern_tuple_entry() {
+            if let Some(entry) = self.pat_tuple_entry() {
                 entries.push(entry);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(entry) = self.pattern_tuple_entry() {
+                    if let Some(entry) = self.pat_tuple_entry() {
                         entries.push(entry);
                     }
                 }
@@ -383,8 +383,8 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn pattern(&mut self) -> Option<Pat> {
-        if let Some(members) = self.pattern_tuple() {
+    fn pat(&mut self) -> Option<Pat> {
+        if let Some(members) = self.pat_tuple() {
             Some(Pat::Tuple(members))
         } else if let Some(identifier) = self.identifier() {
             Some(Pat::Ident(identifier))
@@ -395,8 +395,8 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn stmt(&mut self) -> Result<Option<Stmt>> {
         if self.accept(TokenKind::Let).is_some() {
-            let pattern = self.pattern().ok_or_else(|| self.invalid_token())?;
-            let args = self.pattern_tuple();
+            let pattern = self.pat().ok_or_else(|| self.invalid_token())?;
+            let args = self.pat_tuple();
             self.accept(TokenKind::Eq)
                 .ok_or_else(|| self.invalid_token())?;
             let expr = self.expr()?.ok_or_else(|| self.invalid_token())?;
@@ -475,10 +475,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn function_args(&mut self) -> Result<Option<Tuple<Pat>>> {
         if self.accept(TokenKind::Or).is_some() {
             let mut args = Vec::new();
-            if let Some(arg) = self.pattern_tuple_entry() {
+            if let Some(arg) = self.pat_tuple_entry() {
                 args.push(arg);
                 while self.accept(TokenKind::Comma).is_some() {
-                    if let Some(arg) = self.pattern_tuple_entry() {
+                    if let Some(arg) = self.pat_tuple_entry() {
                         args.push(arg);
                     }
                 }

@@ -4,6 +4,7 @@ pub enum Error {
     Types,
     KeyNotFound,
     Unbound,
+    Mismatch,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
