@@ -11,5 +11,5 @@ members = [
 ]
 
 [workspace.dependencies]
-rustc-hash = "1.1.0"
-serde = { version = "1.0.156", features = ["derive", "rc"] }
+rustc-hash = "1"
+serde = { version = "1", features = ["derive", "rc"] }
