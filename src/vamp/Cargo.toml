@@ -7,6 +7,9 @@ edition = "2021"
 vamp_syntax = { path = "../vamp_syntax" }
 vamp_sym = { path = "../vamp_sym" }
 vamp_eval = { path = "../vamp_eval" }
+rustc-hash = { workspace = true }
+serde = { workspace = true }
+toml = "0"
 rustyline = "12"
 notify = "6"
 notify-debouncer-mini = "0"

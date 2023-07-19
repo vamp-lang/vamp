@@ -1,8 +1,7 @@
 import (
-  (api:, params:) 'api'
-  (sql:) 'sql'
-  (db:) 'api'
-  (fe:) 'fe'
+  api (@api, params, db)
+  sql (@sql)
+  ui (web)
 )
 
 let listUsersQuery = @sql.query({
@@ -21,11 +20,8 @@ let getUser = @api.get("users/{id}", || {
   @db.query(getUserQuery(id: @params.id))
 })
 
-let user = {
-  use @syntax = 
-}
 
-let users = @fe.component(|| {
+let users = @web.component(|| {
   let users = listUsers()
 
   <div>

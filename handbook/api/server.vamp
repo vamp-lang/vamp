@@ -1,7 +1,7 @@
 import (
-  (api:) 'api'
-  (createDb:) 'db'
-  (createApiServer:) 'api/server'
+  api (api)
+  api.server (createApiServer)
+  db (createDb)
 )
 
 use @api = createApiServer()

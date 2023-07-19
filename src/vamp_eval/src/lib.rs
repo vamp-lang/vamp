@@ -2,16 +2,10 @@ pub mod error;
 pub mod value;
 pub use error::{Error, Result};
 use std::convert::TryInto;
-pub use value::Value;
+pub use value::{Mod, Scope, Value};
 use vamp_sym::Sym;
-use vamp_syntax::ast::{BinOp, Expr, ExprKind, Pat, Stmt, UnOp};
+use vamp_syntax::ast::{self, BinOp, Expr, ExprKind, Pat, Stmt, UnOp};
 use vamp_tuple::{Tuple, TupleEntry};
-
-#[derive(Debug, PartialEq, Default)]
-pub struct Scope<'a> {
-    parent: Option<&'a Scope<'a>>,
-    bindings: Tuple<Value>,
-}
 
 impl<'a> Scope<'a> {
     pub fn new(parent: Option<&'a Scope<'a>>) -> Scope<'a> {
@@ -281,6 +275,17 @@ pub fn eval_stmt(stmt: &Stmt, scope: &mut Scope) -> Result<Option<Value>> {
         }
         Stmt::Expr(expr) => Ok(Some(eval_expr(expr, &scope)?)),
     }
+}
+
+pub fn eval_module<'a>(module_ast: &ast::Mod, scope: &mut Scope) -> Result<Mod<'a>> {
+    let module = Mod {
+        deps: module_ast.deps.clone(),
+        scope: Default::default(),
+    };
+    for stmt in module_ast.defs.iter() {
+        eval_stmt(stmt, scope)?;
+    }
+    Ok(module)
 }
 
 #[cfg(test)]
