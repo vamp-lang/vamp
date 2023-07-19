@@ -1,16 +1,61 @@
-use notify::RecursiveMode;
+use notify::{RecursiveMode, Watcher};
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use vamp_eval::{eval_stmt, Scope};
 use vamp_sym::Interner;
 use vamp_syntax::parser::parse_stmt;
 
-fn reload_file(path: &Path) {}
+struct Workspace {
+    root_path: PathBuf,
+    watcher: Watcher,
+}
+
+impl Workspace {
+    fn new(root_path: PathBuf) -> Self {
+        let debouncer = new_debouncer(
+            Duration::from_secs(1),
+            None,
+            |result: DebouncedEventResult| match result {
+
+            }
+        );
+        Self {
+            root_path,
+
+        }
+    }
+
+    fn reload(&self, path: &Path) {}
+
+    fn watch(&self) {
+        let mut debouncer = new_debouncer(
+            Duration::from_secs(1),
+            None,
+            |result: DebouncedEventResult| match result {
+                Ok(events) => {
+                    if event.path.extension() == Some("vamp".as_ref()) {
+                        self.reload(&event.path);
+                    }
+                }
+                Err(errors) => {
+                    for error in errors {
+                        eprintln!("error: {:?}", error);
+                    }
+                }
+            },
+        );
+        let watcher = debouncer.watcher();
+    }
+}
 
 fn main() {
     let root_path = Path::new(".");
+    let workspace = Workspace::new(root_path.to_owned());
     let mut debouncer = new_debouncer(
         Duration::from_secs(1),
         None,
@@ -29,7 +74,7 @@ fn main() {
     )
     .unwrap();
     let watcher = debouncer.watcher();
-    watcher.watch(root_path, RecursiveMode::Recursive).unwrap();
+    watcher.watch(&root_path, RecursiveMode::Recursive).unwrap();
 
     let mut editor = DefaultEditor::new().unwrap();
     let mut interner = Interner::new();
