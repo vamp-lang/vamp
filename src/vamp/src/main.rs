@@ -4,9 +4,11 @@ use rustc_hash::FxHashMap;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::{
+    cell::RefCell,
     fs, io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    rc::Rc,
+    sync::mpsc::channel,
     time::Duration,
 };
 use toml;
@@ -23,19 +25,19 @@ enum Error {
     RuntimeError(vamp_eval::Error),
 }
 
-struct Session<'a> {
+struct Session {
     root: PathBuf,
     interner: Interner,
-    scope: Scope<'a>,
-    modules: FxHashMap<String, Mod<'a>>,
+    scope: Rc<RefCell<Scope>>,
+    modules: FxHashMap<String, Mod>,
 }
 
-impl<'a> Session<'a> {
+impl Session {
     fn new(root: PathBuf) -> Self {
         Self {
             root,
             interner: Interner::new(),
-            scope: Scope::new(None),
+            scope: Rc::new(RefCell::new(Scope::new(None))),
             modules: FxHashMap::default(),
         }
     }
@@ -59,15 +61,21 @@ impl<'a> Session<'a> {
             }
             self.load(&dep_path, false)?;
         }
-        let module = eval_module(&module, &mut self.scope).map_err(Error::RuntimeError)?;
+        let module = eval_module(&module, self.scope.clone()).map_err(Error::RuntimeError)?;
         self.modules.insert(module_path.into(), module);
         Ok(())
     }
 
     fn eval_stmt(&mut self, stmt_source: &str) -> Result<Option<Value>, Error> {
         let stmt = parse_stmt(stmt_source, &mut self.interner).map_err(Error::SyntaxError)?;
-        Ok(eval_stmt(&stmt, &mut self.scope).map_err(Error::RuntimeError)?)
+        Ok(eval_stmt(&stmt, self.scope.clone()).map_err(Error::RuntimeError)?)
     }
+}
+
+pub enum SourceEvent {
+    File(PathBuf),
+    Repl(String),
+    Exit,
 }
 
 fn main() {
@@ -82,61 +90,78 @@ fn main() {
     let package = config.package;
     let root = Path::new(&package.root).canonicalize().unwrap();
 
-    let mut session = Session::new(root.clone());
-    session.load(Path::new(&package.entry), false).unwrap();
-
-    let session = Arc::new(Mutex::new(session));
+    let (tx, rx) = channel();
     let mut debouncer = new_debouncer(Duration::from_secs(1), None, {
-        let session = session.clone();
+        let tx = tx.clone();
         let root = root.clone();
-        move |event: DebounceEventResult| match event {
+        move |result: DebounceEventResult| match result {
             Ok(events) => {
                 for event in events {
                     if event.path.extension() == Some("vamp".as_ref()) {
-                        let mut session = session.lock().unwrap();
-                        session
-                            .load(event.path.strip_prefix(&root).unwrap(), true)
-                            .unwrap();
+                        tx.send(SourceEvent::File(
+                            event.path.strip_prefix(&root).unwrap().to_path_buf(),
+                        ))
+                        .unwrap();
                     }
                 }
             }
             Err(errors) => {
-                eprintln!("error: {:?}", errors);
+                for error in errors {
+                    eprintln!("{:?}", error);
+                }
             }
         }
     })
     .unwrap();
-    let watcher = debouncer.watcher();
-    watcher.watch(&root, RecursiveMode::Recursive).unwrap();
+    debouncer
+        .watcher()
+        .watch(&root, RecursiveMode::Recursive)
+        .unwrap();
 
-    let mut editor = DefaultEditor::new().unwrap();
-    loop {
-        let readline = editor.readline("> ");
-        match readline {
-            Ok(line) => {
-                editor.add_history_entry(&line).unwrap();
-                let mut session = session.lock().unwrap();
-                match session.eval_stmt(&line) {
-                    Ok(value) => {
-                        println!("{:?}", value);
+    std::thread::spawn({
+        let tx = tx.clone();
+        move || {
+            let mut editor = DefaultEditor::new().unwrap();
+            loop {
+                let readline = editor.readline("> ");
+                match readline {
+                    Ok(line) => {
+                        editor.add_history_entry(&line).unwrap();
+                        tx.send(SourceEvent::Repl(line)).unwrap();
+                    }
+                    Err(ReadlineError::Interrupted) => {
+                        println!("Ctrl-C");
+                        tx.send(SourceEvent::Exit).unwrap();
+                        break;
+                    }
+                    Err(ReadlineError::Eof) => {
+                        println!("Ctrl-D");
+                        tx.send(SourceEvent::Exit).unwrap();
+                        break;
                     }
                     Err(error) => {
-                        eprintln!("{:?}", error);
+                        eprintln!("error: {:?}", error);
+                        break;
                     }
                 }
             }
-            Err(ReadlineError::Interrupted) => {
-                println!("Ctrl-C");
-                break;
-            }
-            Err(ReadlineError::Eof) => {
-                println!("Ctrl-D");
-                break;
-            }
-            Err(error) => {
-                eprintln!("error: {:?}", error);
-                break;
-            }
+        }
+    });
+
+    let mut session = Session::new(root.clone());
+    session.load(Path::new(&package.entry), false).unwrap();
+    for event in rx {
+        match event {
+            SourceEvent::File(path) => session.load(&path, true).unwrap(),
+            SourceEvent::Repl(line) => match session.eval_stmt(&line) {
+                Ok(value) => {
+                    println!("{:?}", value);
+                }
+                Err(error) => {
+                    eprintln!("{:?}", error);
+                }
+            },
+            SourceEvent::Exit => break,
         }
     }
 }
