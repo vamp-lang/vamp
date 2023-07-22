@@ -56,7 +56,6 @@ fn valid_tokens() {
         // Keywords
         (TokenKind::Use, "use"),
         (TokenKind::Let, "let"),
-        (TokenKind::Type, "type"),
         (TokenKind::If, "if"),
         (TokenKind::Else, "else"),
         (TokenKind::For, "for"),

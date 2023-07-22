@@ -46,7 +46,6 @@ pub enum TokenKind {
     // Keywords
     Use,
     Let,
-    Type,
     If,
     Else,
     For,
@@ -251,7 +250,6 @@ impl<'a> Tokens<'a> {
             self.ok(match &self.source[self.span] {
                 "use" => TokenKind::Use,
                 "let" => TokenKind::Let,
-                "type" => TokenKind::Type,
                 "if" => TokenKind::If,
                 "else" => TokenKind::Else,
                 "for" => TokenKind::For,

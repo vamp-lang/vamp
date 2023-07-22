@@ -119,6 +119,8 @@ pub enum ExprKind {
     UnOp(UnOp, Box<Expr>),
     /// A binary operator applied to two operand expressions.
     BinOp(BinOp, Box<Expr>, Box<Expr>),
+    /// An if-else expression.
+    IfElse(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq, Clone)]

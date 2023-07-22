@@ -394,6 +394,51 @@ fn test_blocks() {
 }
 
 #[test]
+fn test_if_else() {
+    let mut interner = Interner::new();
+    let x = interner.intern("x");
+    let y = interner.intern("y");
+    assert_eq!(
+        parse_expr("if x < 10 { x } else { 10 }", &mut interner),
+        Ok(Expr::unknown(ExprKind::IfElse(
+            Expr::unknown(ExprKind::BinOp(
+                BinOp::Lt,
+                Expr::unknown(ExprKind::Ident(x)).into(),
+                Expr::unknown(ExprKind::Int(10)).into()
+            ))
+            .into(),
+            Expr::unknown(ExprKind::Ident(x)).into(),
+            Expr::unknown(ExprKind::Int(10)).into(),
+        )))
+    );
+    assert_eq!(
+        parse_expr("if x < y { x } else if y < 10 { y } else { 10 }", &mut interner),
+        Ok(Expr::unknown(ExprKind::IfElse(
+            Expr::unknown(ExprKind::BinOp(
+                BinOp::Lt,
+                Expr::unknown(ExprKind::Ident(x)).into(),
+                Expr::unknown(ExprKind::Ident(y)).into()
+            ))
+            .into(),
+            Expr::unknown(ExprKind::Ident(x)).into(),
+            Expr::unknown(ExprKind::IfElse(
+                Expr::unknown(ExprKind::BinOp(
+                    BinOp::Lt,
+                    Expr::unknown(ExprKind::Ident(y)).into(),
+                    Expr::unknown(ExprKind::Int(10)).into()
+                ))
+                .into(),
+                Expr::unknown(ExprKind::Ident(y)).into(),
+                Expr::unknown(ExprKind::Int(10)).into(),
+            )).into(),
+        )))
+    );
+}
+
+#[test]
+fn test_for() {}
+
+#[test]
 fn test_modules() {
     let mut interner = Interner::new();
     let x = interner.intern("x");

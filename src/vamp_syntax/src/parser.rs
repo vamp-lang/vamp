@@ -284,18 +284,17 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 
     fn tuple_entry(&mut self) -> Result<Option<TupleEntry<Expr>>> {
+        let i = self.index;
         if let Some(identifier) = self.identifier() {
             if self.accept(TokenKind::Colon).is_some() {
                 let expr = self
                     .expr()?
                     .unwrap_or_else(|| Expr::unknown(ExprKind::Ident(identifier)));
-                Ok(Some(TupleEntry::Named(identifier, expr)))
-            } else {
-                Ok(Some(TupleEntry::Pos(Expr::unknown(ExprKind::Ident(
-                    identifier,
-                )))))
+                return Ok(Some(TupleEntry::Named(identifier, expr)));
             }
-        } else if let Some(expr) = self.expr()? {
+            self.index = i;
+        }
+        if let Some(expr) = self.expr()? {
             Ok(Some(TupleEntry::Pos(expr)))
         } else {
             Ok(None)
@@ -502,6 +501,37 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
+    fn if_else(&mut self) -> Result<Option<Expr>> {
+        if self.accept(TokenKind::If).is_some() {
+            let condition = self.expr()?.ok_or_else(|| self.invalid_token())?;
+            let if_expr = self.block()?.ok_or_else(|| self.invalid_token())?;
+            self.accept(TokenKind::Else)
+                .ok_or_else(|| self.invalid_token())?;
+            let else_expr = if let Some(if_else) = self.if_else()? {
+                if_else
+            } else if let Some(block) = self.block()? {
+                block
+            } else {
+                return Err(self.invalid_token());
+            };
+            Ok(Some(Expr::unknown(ExprKind::IfElse(
+                condition.into(),
+                if_expr.into(),
+                else_expr.into(),
+            ))))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn for_loop(&mut self) -> Result<Option<Expr>> {
+        if self.accept(TokenKind::For).is_some() {
+            todo!()
+        } else {
+            Ok(None)
+        }
+    }
+
     fn expr_with_precedence(&mut self, min_prec: u8) -> Result<Option<Expr>> {
         // Handle unary operators.
         let left = if let Some((un_op, r_prec)) = self.accept_un_op() {
@@ -547,6 +577,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn expr(&mut self) -> Result<Option<Expr>> {
         if let Some(function) = self.function()? {
             Ok(Some(function))
+        } else if let Some(expr) = self.if_else()? {
+            Ok(Some(expr))
+        } else if let Some(expr) = self.for_loop()? {
+            Ok(Some(expr))
         } else if let Some(expr) = self.expr_with_precedence(0)? {
             Ok(Some(expr))
         } else {
