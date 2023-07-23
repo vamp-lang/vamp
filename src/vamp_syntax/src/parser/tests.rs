@@ -21,11 +21,11 @@ fn test_idents() {
     );
     assert_eq!(
         parse_expr("@0", &mut interner),
-        Ok(Expr::unknown(ExprKind::Ident(at_0)))
+        Ok(Expr::unknown(ExprKind::CtxIdent(at_0)))
     );
     assert_eq!(
         parse_expr("@self", &mut interner),
-        Ok(Expr::unknown(ExprKind::Ident(at_self)))
+        Ok(Expr::unknown(ExprKind::CtxIdent(at_self)))
     );
     assert_eq!(
         parse_expr("lower_snake_case", &mut interner),
@@ -412,7 +412,10 @@ fn test_if_else() {
         )))
     );
     assert_eq!(
-        parse_expr("if x < y { x } else if y < 10 { y } else { 10 }", &mut interner),
+        parse_expr(
+            "if x < y { x } else if y < 10 { y } else { 10 }",
+            &mut interner
+        ),
         Ok(Expr::unknown(ExprKind::IfElse(
             Expr::unknown(ExprKind::BinOp(
                 BinOp::Lt,
@@ -430,7 +433,8 @@ fn test_if_else() {
                 .into(),
                 Expr::unknown(ExprKind::Ident(y)).into(),
                 Expr::unknown(ExprKind::Int(10)).into(),
-            )).into(),
+            ))
+            .into(),
         )))
     );
 }

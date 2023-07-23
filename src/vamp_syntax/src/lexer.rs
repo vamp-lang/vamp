@@ -52,6 +52,7 @@ pub enum TokenKind {
 
     // Identifiers
     Ident,
+    CtxIdent,
 
     // Literals
     Sym,
@@ -244,8 +245,8 @@ impl<'a> Tokens<'a> {
         }
     }
 
-    fn identifier(&mut self) -> Option<Result<Token>> {
-        if self.bump_if(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'_' | b'@')) {
+    fn ident(&mut self) -> Option<Result<Token>> {
+        if self.bump_if(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'_')) {
             self.bump_while(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_'));
             self.ok(match &self.source[self.span] {
                 "use" => TokenKind::Use,
@@ -257,6 +258,15 @@ impl<'a> Tokens<'a> {
                 "false" => TokenKind::False,
                 _ => TokenKind::Ident,
             })
+        } else {
+            None
+        }
+    }
+
+    fn ctx_ident(&mut self) -> Option<Result<Token>> {
+        if self.bump_if(|c| c == b'@') {
+            self.bump_while(|c| matches!(c, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_'));
+            self.ok(TokenKind::CtxIdent)
         } else {
             None
         }
@@ -360,7 +370,8 @@ impl<'a> Iterator for Tokens<'a> {
         }
 
         self.punctuation()
-            .or_else(|| self.identifier())
+            .or_else(|| self.ident())
+            .or_else(|| self.ctx_ident())
             .or_else(|| self.symbol_or_string())
             .or_else(|| self.int_or_float())
             .or_else(|| self.error())

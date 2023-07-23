@@ -105,8 +105,12 @@ impl<'src, 'sym> Parser<'src, 'sym> {
         }
     }
 
-    fn identifier(&mut self) -> Option<Sym> {
+    fn ident(&mut self) -> Option<Sym> {
         self.accept_sym(TokenKind::Ident)
+    }
+
+    fn ctx_ident(&mut self) -> Option<Sym> {
+        self.accept_sym(TokenKind::CtxIdent)
     }
 
     fn unescape(&mut self, span: Span) -> Result<String> {
@@ -285,7 +289,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
 
     fn tuple_entry(&mut self) -> Result<Option<TupleEntry<Expr>>> {
         let i = self.index;
-        if let Some(identifier) = self.identifier() {
+        if let Some(identifier) = self.ident() {
             if self.accept(TokenKind::Colon).is_some() {
                 let expr = self
                     .expr()?
@@ -348,7 +352,7 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     }
 
     fn pat_tuple_entry(&mut self) -> Option<TupleEntry<Pat>> {
-        if let Some(identifier) = self.identifier() {
+        if let Some(identifier) = self.ident() {
             if self.accept(TokenKind::Colon).is_some() {
                 let pattern = self.pat().unwrap_or_else(|| Pat::Ident(identifier));
                 Some(TupleEntry::Named(identifier, pattern))
@@ -385,8 +389,10 @@ impl<'src, 'sym> Parser<'src, 'sym> {
     fn pat(&mut self) -> Option<Pat> {
         if let Some(members) = self.pat_tuple() {
             Some(Pat::Tuple(members))
-        } else if let Some(identifier) = self.identifier() {
-            Some(Pat::Ident(identifier))
+        } else if let Some(ident) = self.ident() {
+            Some(Pat::Ident(ident))
+        } else if let Some(ctx_ident) = self.ctx_ident() {
+            Some(Pat::CtxIdent(ctx_ident))
         } else {
             None
         }
@@ -454,12 +460,14 @@ impl<'src, 'sym> Parser<'src, 'sym> {
             Ok(Some(Expr::unknown(ExprKind::List(list))))
         } else if let Some(block) = self.block()? {
             Ok(Some(block))
-        } else if let Some(identifier) = self.identifier() {
-            Ok(Some(Expr::unknown(ExprKind::Ident(identifier))))
-        } else if let Some(symbol) = self.symbol()? {
-            Ok(Some(Expr::unknown(ExprKind::Sym(symbol))))
-        } else if let Some(string) = self.string()? {
-            Ok(Some(Expr::unknown(ExprKind::Str(string))))
+        } else if let Some(ident) = self.ident() {
+            Ok(Some(Expr::unknown(ExprKind::Ident(ident))))
+        } else if let Some(ctx_ident) = self.ctx_ident() {
+            Ok(Some(Expr::unknown(ExprKind::CtxIdent(ctx_ident))))
+        } else if let Some(sym) = self.symbol()? {
+            Ok(Some(Expr::unknown(ExprKind::Sym(sym))))
+        } else if let Some(str) = self.string()? {
+            Ok(Some(Expr::unknown(ExprKind::Str(str))))
         } else if let Some(int) = self.int()? {
             Ok(Some(Expr::unknown(ExprKind::Int(int))))
         } else if let Some(float) = self.float()? {

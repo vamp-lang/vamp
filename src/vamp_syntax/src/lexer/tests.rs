@@ -70,8 +70,9 @@ fn valid_tokens() {
         (TokenKind::Ident, "X1"),
         (TokenKind::Ident, "Identifier"),
         (TokenKind::Ident, "SHIFT_RIGHT"),
-        (TokenKind::Ident, "@"),
-        (TokenKind::Ident, "@self"),
+        // Context identifiers
+        (TokenKind::CtxIdent, "@"),
+        (TokenKind::CtxIdent, "@self"),
         // Symbol literals
         (TokenKind::Sym, "''"),
         (TokenKind::Sym, "'_'"),

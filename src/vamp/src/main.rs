@@ -29,6 +29,7 @@ struct Session {
     root: PathBuf,
     interner: Interner,
     scope: Rc<RefCell<Scope>>,
+    ctx: Rc<RefCell<Scope>>,
     modules: FxHashMap<String, Mod>,
 }
 
@@ -38,6 +39,7 @@ impl Session {
             root,
             interner: Interner::new(),
             scope: Rc::new(RefCell::new(Scope::new(None))),
+            ctx: Rc::new(RefCell::new(Scope::new(None))),
             modules: FxHashMap::default(),
         }
     }
@@ -61,14 +63,15 @@ impl Session {
             }
             self.load(&dep_path, false)?;
         }
-        let module = eval_module(&module, self.scope.clone()).map_err(Error::RuntimeError)?;
+        let module = eval_module(&module, self.scope.clone(), self.ctx.clone())
+            .map_err(Error::RuntimeError)?;
         self.modules.insert(module_path.into(), module);
         Ok(())
     }
 
     fn eval_stmt(&mut self, stmt_source: &str) -> Result<Option<Value>, Error> {
         let stmt = parse_stmt(stmt_source, &mut self.interner).map_err(Error::SyntaxError)?;
-        Ok(eval_stmt(&stmt, self.scope.clone()).map_err(Error::RuntimeError)?)
+        Ok(eval_stmt(&stmt, self.scope.clone(), self.ctx.clone()).map_err(Error::RuntimeError)?)
     }
 }
 

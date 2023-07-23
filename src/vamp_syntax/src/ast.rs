@@ -7,6 +7,7 @@ pub enum Pat {
     Tuple(Tuple<Pat>),
     List(Box<[Pat]>),
     Ident(Sym),
+    CtxIdent(Sym),
     Sym(Sym),
     Str(String),
     Int(i64),
@@ -105,6 +106,8 @@ pub enum ExprKind {
     Fn(Tuple<Pat>, Box<Expr>),
     /// An identifier.
     Ident(Sym),
+    /// A context identifier.
+    CtxIdent(Sym),
     /// A symbol literal `'abc'`.
     Sym(Sym),
     /// A string literal `"abc"`.

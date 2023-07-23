@@ -43,63 +43,8 @@ impl Scope {
         }
     }
 
-    pub fn bind_tuple(&mut self, pat: &Tuple<Pat>, value: Tuple<Value>) -> Result<()> {
-        let mut i = 0usize;
-        for entry in pat.iter() {
-            match entry {
-                TupleEntry::Pos(pat) => {
-                    let value = value.get(i).ok_or(Error::Mismatch)?;
-                    self.bind(pat, value.clone())?;
-                    i += 1;
-                }
-                TupleEntry::Named(key, pat) => {
-                    let value = value.get(key).ok_or(Error::Mismatch)?;
-                    self.bind(pat, value.clone())?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn bind(&mut self, pat: &Pat, value: Value) -> Result<()> {
-        match pat {
-            Pat::Ident(sym) => {
-                self.bindings.insert(*sym, value);
-                Ok(())
-            }
-            Pat::Sym(sym) => match value {
-                Value::Sym(value) if &value == sym => Ok(()),
-                _ => Err(Error::Mismatch),
-            },
-            Pat::Str(str) => match value {
-                Value::Str(value) if &value == str => Ok(()),
-                _ => Err(Error::Mismatch),
-            },
-            Pat::Int(x) => match value {
-                Value::Int(value) if &value == x => Ok(()),
-                _ => Err(Error::Mismatch),
-            },
-            Pat::Float(x) => match value {
-                Value::Float(value) if &value == x => Ok(()),
-                _ => Err(Error::Mismatch),
-            },
-            Pat::Bool(x) => match value {
-                Value::Bool(value) if &value == x => Ok(()),
-                _ => Err(Error::Mismatch),
-            },
-            Pat::Tuple(tuple) => match value {
-                Value::Tuple(value) => self.bind_tuple(tuple, value),
-                _ => Err(Error::Mismatch),
-            },
-            /*
-            Pat::List(items) => {
-                for item in items.into_iter() {
-                    self.bind(item, value);
-                }
-            }*/
-            Pat::Wild => Ok(()),
-            _ => todo!(),
-        }
+    pub fn bind(&mut self, name: Sym, value: Value) {
+        self.bindings.insert(name, value);
     }
 
     pub fn lookup(&self, name: Sym) -> Result<Value> {
