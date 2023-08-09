@@ -2,7 +2,7 @@
 
 A programming language for radical productivity.
 
-Vamp is in its infancy. The language has yet to be fully specified or implemented as it evolves from its mathematical conception. It is an ambitious project to rethink the way programming languages compose state and behavior and unify the principles of pure functional programming and imperative programming. There are also many interesting topics that need more exploring and a bunch of mathematical problems I haven't fully solved. If you are a programming language enthusiast, please proceed (I'd love feedback).
+Vamp is in its infancy. The language has yet to be fully specified or implemented as it evolves from its conception.
 
 Features:
 
@@ -27,7 +27,7 @@ For the most part, you see types where you care about seeing types: in your edit
 Vamp's context scoping is inspired by Common Lisp's dynamically scoped variables and, to some extent, React's `useContext`. Unlike normal variables, which have their scope determined by blocks, context variables are inherited by the call stack.
 
 ```
-ctx @message: String
+let @message: String
 
 let sayHello() = {
   print(@message)
